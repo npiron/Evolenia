@@ -1,0 +1,14 @@
+[package]
+name = "evolenia"
+version = "2.0.0"
+edition = "2021"
+description = "EvoLenia v2 — Spatially-varying continuous cellular automaton with endogenous evolution"
+
+[dependencies]
+wgpu = "22"
+winit = "0.30"
+bytemuck = { version = "1", features = ["derive"] }
+pollster = "0.4"
+rand = "0.8"
+env_logger = "0.11"
+log = "0.4"

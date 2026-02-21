@@ -1,0 +1,1 @@
+/workspaces/Evolenia/target/release/evolenia: /workspaces/Evolenia/src/main.rs /workspaces/Evolenia/src/shaders/compute_evolution.wgsl /workspaces/Evolenia/src/shaders/compute_resources.wgsl /workspaces/Evolenia/src/shaders/compute_velocity.wgsl /workspaces/Evolenia/src/shaders/normalize_mass.wgsl /workspaces/Evolenia/src/shaders/render.wgsl /workspaces/Evolenia/src/world.rs
