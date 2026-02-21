@@ -80,7 +80,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let r      = ga.x; // perception radius
     let mu     = ga.y; // growth center (ecological niche)
-    let sigma  = ga.z; // growth width (tolerance)
+    // Guard: sigma must be > 0 to avoid division by zero in growth function
+    // exp(-x²/(2·0²)) = exp(-∞) or exp(NaN) — catastrophic for the simulation
+    let sigma  = max(ga.z, 0.005); // growth width (tolerance), minimum 0.005
     let agg    = ga.w; // aggressivity
 
     // Base seed for PRNG — unique per pixel per frame

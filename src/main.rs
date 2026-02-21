@@ -481,7 +481,12 @@ impl ApplicationHandler for App {
                     force_fallback_adapter: false,
                 })
                 .await
-                .expect("Failed to find a suitable GPU adapter");
+                .expect(
+                    "Failed to find a suitable GPU adapter.\n\
+                     EvoLenia requires a GPU with Vulkan, Metal, or DX12 support.\n\
+                     If running in a VM or remote environment (e.g. GitHub Codespace),\n\
+                     please run on a local machine with a GPU."
+                );
 
             log::info!("GPU: {}", adapter.get_info().name);
 
@@ -492,7 +497,9 @@ impl ApplicationHandler for App {
                         required_features: wgpu::Features::empty(),
                         required_limits: wgpu::Limits {
                             max_storage_buffers_per_shader_stage: 12,
-                            max_storage_buffer_binding_size: 1024 * 1024 * 1024,
+                            // Largest buffer = genome_a: 1024*1024*16 = 16 MiB
+                            // Request 256 MiB to leave headroom without being unreasonable
+                            max_storage_buffer_binding_size: 256 * 1024 * 1024,
                             ..Default::default()
                         },
                         memory_hints: Default::default(),
@@ -707,7 +714,15 @@ impl ApplicationHandler for App {
 
                 // Metrics logging (every 300 frames)
                 if state.world.frame % 300 == 0 {
-                    log::info!("Frame {}", state.world.frame);
+                    let frame = state.world.frame;
+                    // In a production version, we would readback mass_sum from GPU
+                    // to verify conservation. For now, log frame counter and target.
+                    let target = target_total_mass();
+                    eprintln!(
+                        "frame,{},target_mass,{:.1}",
+                        frame, target
+                    );
+                    log::info!("Frame {} | Target mass: {:.0}", frame, target);
                 }
 
                 // Request next frame

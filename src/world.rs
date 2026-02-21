@@ -112,7 +112,10 @@ impl WorldState {
         // ---- Initialize data on CPU ----
         let mut mass_data = vec![0.0f32; n];
         let mut energy_data = vec![0.5f32; n]; // uniform initial energy
-        let mut genome_a_data = vec![[0.0f32; 4]; n]; // [r, mu, sigma, agg]
+        // CRITICAL: default genome must have valid values even for empty pixels.
+        // sigma=0 causes division by zero in the growth function (exp(-x²/2σ²)).
+        // Using safe defaults: r=5, mu=0.5, sigma=0.15, agg=0
+        let mut genome_a_data = vec![[5.0f32, 0.5, 0.15, 0.0]; n]; // [r, mu, sigma, agg]
         let mut genome_b_data = vec![0.01f32; n]; // default mutation rate
         let resource_data = vec![1.0f32; n]; // full nutrients everywhere
 
