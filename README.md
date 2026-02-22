@@ -225,6 +225,28 @@ Or shader constants in [src/shaders/compute_evolution.wgsl](src/shaders/compute_
 
 ---
 
+## 🧭 Project Review (BMAD)
+
+Cette revue suit la méthode **BMAD** (Business, Model, Architecture, Delivery) pour offrir un regard équilibré sur la valeur, la rigueur scientifique, la structure technique et la capacité de livraison.
+
+### Business
+- **Valeur** : simulateur de vie artificielle open-source, orienté recherche, avec visualisation temps réel.
+- **Public cible** : chercheurs, enseignants et passionnés d’ALife; licence MIT facilite l’adoption.
+
+### Model
+- **Rigueur** : Lenia + Gray-Scott + conservation de masse; évolution endogène crédible.
+- **Axes d’amélioration** : réglages en temps réel (UI), configuration externe, tests de reproductibilité.
+
+### Architecture
+- **Forces** : Rust + WGPU, pipeline GPU clair, shaders isolés, mode headless + snapshots.
+- **Faiblesses** : constantes encore codées en dur; intégration UI/egui à finaliser.
+
+### Delivery
+- **Forces** : documentation complète, script `run.sh`, changelog structuré.
+- **À renforcer** : CI automatisée (fmt/clippy/tests) et couverture de tests.
+
+---
+
 ## 📚 References
 
 This project builds on:
