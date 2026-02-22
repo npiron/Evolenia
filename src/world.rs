@@ -6,7 +6,10 @@
 
 use bytemuck::{Pod, Zeroable};
 use rand::Rng;
+use rand::SeedableRng;
 use wgpu::util::DeviceExt;
+
+use crate::config::SimulationParams;
 
 // ======================== Constants ========================
 
@@ -38,6 +41,10 @@ pub struct SimParams {
     pub height: u32,
     pub frame: u32,
     pub dt: f32,
+    pub mutation_rate_mult: f32,
+    pub predation_factor: f32,
+    pub _pad1: u32,
+    pub _pad2: u32,
 }
 
 #[repr(C)]
@@ -54,8 +61,12 @@ pub struct VelocityParams {
 pub struct ResourceParams {
     pub width: u32,
     pub height: u32,
-    pub frame: u32,
-    pub _pad: u32,
+    pub diffusion: f32,
+    pub feed_rate: f32,
+    pub consumption: f32,
+    pub _pad1: u32,
+    pub _pad2: u32,
+    pub _pad3: u32,
 }
 
 #[repr(C)]
@@ -64,7 +75,11 @@ pub struct NormalizeParams {
     pub width: u32,
     pub height: u32,
     pub target_mass_x1000: u32,
-    pub _pad: u32,
+    pub damping_x1000: u32,
+    pub enabled: u32,
+    pub _pad1: u32,
+    pub _pad2: u32,
+    pub _pad3: u32,
 }
 
 #[repr(C)]
@@ -126,8 +141,15 @@ pub struct WorldState {
 
 impl WorldState {
     pub fn new(device: &wgpu::Device) -> Self {
+        Self::new_with_seed(device, None)
+    }
+
+    pub fn new_with_seed(device: &wgpu::Device, seed: Option<u64>) -> Self {
         let n = total_pixels() as usize;
-        let mut rng = rand::thread_rng();
+        let mut rng: rand::rngs::StdRng = match seed {
+            Some(s) => rand::rngs::StdRng::seed_from_u64(s),
+            None => rand::rngs::StdRng::from_entropy(),
+        };
 
         // ---- Initialize data on CPU ----
         let mut mass_data = vec![0.0f32; n];
@@ -174,7 +196,7 @@ impl WorldState {
         };
 
         // --- Random genome generator ---
-        let random_genome = |rng: &mut rand::rngs::ThreadRng| -> ([f32; 4], f32) {
+        let random_genome = |rng: &mut rand::rngs::StdRng| -> ([f32; 4], f32) {
             let gene_r: f32 = rng.gen_range(3.0..9.0);
             let gene_mu: f32 = rng.gen_range(0.12..0.30);
             let gene_sigma: f32 = rng.gen_range(0.04..0.18);
@@ -468,6 +490,10 @@ impl WorldState {
             height: WORLD_HEIGHT,
             frame: 0,
             dt: DT,
+            mutation_rate_mult: 1.0,
+            predation_factor: 1.0,
+            _pad1: 0,
+            _pad2: 0,
         };
         let sim_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("sim_params"),
@@ -491,8 +517,12 @@ impl WorldState {
         let resource_params = ResourceParams {
             width: WORLD_WIDTH,
             height: WORLD_HEIGHT,
-            frame: 0,
-            _pad: 0,
+            diffusion: 0.08,
+            feed_rate: 0.010,
+            consumption: 0.08,
+            _pad1: 0,
+            _pad2: 0,
+            _pad3: 0,
         };
         let resource_params_buffer =
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -505,7 +535,11 @@ impl WorldState {
             width: WORLD_WIDTH,
             height: WORLD_HEIGHT,
             target_mass_x1000: (target_total_mass() * 1000.0) as u32,
-            _pad: 0,
+            damping_x1000: 300,
+            enabled: 1,
+            _pad1: 0,
+            _pad2: 0,
+            _pad3: 0,
         };
         let normalize_params_buffer =
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -584,6 +618,37 @@ impl WorldState {
         }
     }
 
+    /// Overwrite simulation buffers from a CPU snapshot.
+    /// Returns false if snapshot dimensions are incompatible with current world size.
+    pub fn apply_snapshot(&mut self, queue: &wgpu::Queue, snapshot: &BufferSnapshot) -> bool {
+        let n = total_pixels() as usize;
+        if snapshot.mass.len() != n
+            || snapshot.energy.len() != n
+            || snapshot.genome_a.len() != n * 4
+            || snapshot.genome_b.len() != n
+            || snapshot.resource.len() != n
+        {
+            return false;
+        }
+
+        let write_mass = bytemuck::cast_slice(snapshot.mass.as_slice());
+        let write_energy = bytemuck::cast_slice(snapshot.energy.as_slice());
+        let write_genome_a = bytemuck::cast_slice(snapshot.genome_a.as_slice());
+        let write_genome_b = bytemuck::cast_slice(snapshot.genome_b.as_slice());
+        let write_resource = bytemuck::cast_slice(snapshot.resource.as_slice());
+
+        for i in 0..2 {
+            queue.write_buffer(&self.mass[i], 0, write_mass);
+            queue.write_buffer(&self.energy[i], 0, write_energy);
+            queue.write_buffer(&self.genome_a[i], 0, write_genome_a);
+            queue.write_buffer(&self.genome_b[i], 0, write_genome_b);
+        }
+        queue.write_buffer(&self.resource_map, 0, write_resource);
+
+        self.current = 0;
+        true
+    }
+
     /// Swap ping-pong buffers after a frame
     pub fn swap(&mut self) {
         self.current = 1 - self.current;
@@ -601,39 +666,62 @@ impl WorldState {
         1 - self.current
     }
 
-    /// Update the frame counter in uniform buffers
-    pub fn update_uniforms(&self, queue: &wgpu::Queue) {
+    /// Update per-step uniforms required by simulation passes.
+    /// Kept minimal for performance: only fields actually consumed every frame.
+    pub fn update_step_uniforms(&self, queue: &wgpu::Queue) {
         let sim_params = SimParams {
             width: WORLD_WIDTH,
             height: WORLD_HEIGHT,
             frame: self.frame,
             dt: DT,
+            mutation_rate_mult: 1.0,
+            predation_factor: 1.0,
+            _pad1: 0,
+            _pad2: 0,
         };
         queue.write_buffer(&self.sim_params_buffer, 0, bytemuck::bytes_of(&sim_params));
 
-        let velocity_params = VelocityParams {
+        // Reset mass_sum atomic to 0 before each normalization pass
+        queue.write_buffer(&self.mass_sum, 0, bytemuck::bytes_of(&[0u32; 2]));
+    }
+
+    /// Update all uniforms using dynamic parameters from the Research Lab UI.
+    pub fn update_step_uniforms_dynamic(&self, queue: &wgpu::Queue, params: &SimulationParams) {
+        let sim_params = SimParams {
             width: WORLD_WIDTH,
             height: WORLD_HEIGHT,
             frame: self.frame,
-            _pad: 0,
+            dt: DT * params.time_step,
+            mutation_rate_mult: params.mutation_rate,
+            predation_factor: params.predation_factor,
+            _pad1: 0,
+            _pad2: 0,
         };
-        queue.write_buffer(
-            &self.velocity_params_buffer,
-            0,
-            bytemuck::bytes_of(&velocity_params),
-        );
+        queue.write_buffer(&self.sim_params_buffer, 0, bytemuck::bytes_of(&sim_params));
 
         let resource_params = ResourceParams {
             width: WORLD_WIDTH,
             height: WORLD_HEIGHT,
-            frame: self.frame,
-            _pad: 0,
+            diffusion: params.resource_diffusion,
+            feed_rate: params.resource_feed_rate,
+            consumption: params.resource_consumption,
+            _pad1: 0,
+            _pad2: 0,
+            _pad3: 0,
         };
-        queue.write_buffer(
-            &self.resource_params_buffer,
-            0,
-            bytemuck::bytes_of(&resource_params),
-        );
+        queue.write_buffer(&self.resource_params_buffer, 0, bytemuck::bytes_of(&resource_params));
+
+        let normalize_params = NormalizeParams {
+            width: WORLD_WIDTH,
+            height: WORLD_HEIGHT,
+            target_mass_x1000: (target_total_mass() * params.target_mass_multiplier * 1000.0) as u32,
+            damping_x1000: (params.mass_damping * 1000.0) as u32,
+            enabled: if params.mass_normalization_enabled { 1 } else { 0 },
+            _pad1: 0,
+            _pad2: 0,
+            _pad3: 0,
+        };
+        queue.write_buffer(&self.normalize_params_buffer, 0, bytemuck::bytes_of(&normalize_params));
 
         // Reset mass_sum atomic to 0 before each normalization pass
         queue.write_buffer(&self.mass_sum, 0, bytemuck::bytes_of(&[0u32; 2]));

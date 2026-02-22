@@ -1,6 +1,6 @@
 // ============================================================================
-// app.rs — EvoLenia v2
-// Application state and winit event-loop handler.
+// app.rs — EvoLenia v2 + Research Lab
+// Application state and winit event-loop handler with egui UI integration.
 // ============================================================================
 
 use std::sync::Arc;
@@ -16,15 +16,34 @@ use winit::{
 use crate::camera::CameraState;
 use crate::config::SimulationParams;
 use crate::input::KeysHeld;
+use crate::lab::LabState;
+use crate::lab_ui;
 use crate::metrics::SimDiagnostics;
 use crate::pipeline::{create_pipelines, Pipelines};
 use crate::renderer::HudRenderer;
+use crate::state_io;
 use crate::world::*;
 
 // ======================== Application ========================
 
 pub struct App {
     state: Option<AppState>,
+    config: AppConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct AppConfig {
+    pub initial_state_path: Option<String>,
+    pub diag_interval: u32,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            initial_state_path: None,
+            diag_interval: 300,
+        }
+    }
 }
 
 struct AppState {
@@ -46,8 +65,16 @@ struct AppState {
     keys: KeysHeld,
     sim_params: SimulationParams,
 
-    // HUD
+    // HUD (minimal, kept as fallback)
     hud: HudRenderer,
+
+    // egui
+    egui_ctx: egui::Context,
+    egui_winit_state: egui_winit::State,
+    egui_renderer: egui_wgpu::Renderer,
+
+    // Research Lab
+    lab: LabState,
 
     // Timing
     last_redraw: Instant,
@@ -59,8 +86,8 @@ struct AppState {
 }
 
 impl App {
-    pub fn new() -> Self {
-        Self { state: None }
+    pub fn new(config: AppConfig) -> Self {
+        Self { state: None, config }
     }
 }
 
@@ -71,8 +98,8 @@ impl ApplicationHandler for App {
         }
 
         let window_attrs = WindowAttributes::default()
-            .with_title("EvoLenia v2 — Artificial Life Engine")
-            .with_inner_size(winit::dpi::LogicalSize::new(1024u32, 1024u32));
+            .with_title("EvoLenia v2 — Research Lab")
+            .with_inner_size(winit::dpi::LogicalSize::new(1280u32, 1024u32));
 
         let window = Arc::new(event_loop.create_window(window_attrs).unwrap());
 
@@ -88,12 +115,51 @@ impl ApplicationHandler for App {
 
         surface.configure(&device, &surface_config);
 
-        let world = WorldState::new(&device);
+        let mut world = WorldState::new(&device);
+        if let Some(path) = &self.config.initial_state_path {
+            match state_io::load_snapshot(path) {
+                Ok(snapshot) => {
+                    if world.apply_snapshot(&queue, &snapshot) {
+                        log::info!("Loaded simulation state from {}", path);
+                    } else {
+                        log::warn!("State file {} has incompatible dimensions; using fresh world", path);
+                    }
+                }
+                Err(err) => {
+                    log::warn!("Failed to load state from {}: {}", path, err);
+                }
+            }
+        }
         let pipelines = create_pipelines(&device, &world, surface_config.format);
         let hud = HudRenderer::new(&device, &queue, surface_config.format);
 
+        // ---- Initialize egui ----
+        let egui_ctx = egui::Context::default();
+        // Dark theme with slightly transparent backgrounds for overlay feel
+        let mut visuals = egui::Visuals::dark();
+        visuals.window_fill = egui::Color32::from_rgba_premultiplied(27, 27, 35, 235);
+        visuals.panel_fill = egui::Color32::from_rgba_premultiplied(20, 20, 28, 230);
+        egui_ctx.set_visuals(visuals);
+
+        let egui_winit_state = egui_winit::State::new(
+            egui_ctx.clone(),
+            egui::ViewportId::ROOT,
+            event_loop,
+            Some(window.scale_factor() as f32),
+            None,
+            None,
+        );
+
+        let egui_renderer = egui_wgpu::Renderer::new(
+            &device,
+            surface_config.format,
+            None,
+            1,
+            false,
+        );
+
         log::info!(
-            "EvoLenia v2 initialized: {}x{}, target mass = {:.0}",
+            "EvoLenia v2 Research Lab initialized: {}x{}, target mass = {:.0}",
             WORLD_WIDTH,
             WORLD_HEIGHT,
             target_total_mass()
@@ -111,10 +177,14 @@ impl ApplicationHandler for App {
             keys: KeysHeld::default(),
             sim_params: SimulationParams::default(),
             hud,
+            egui_ctx,
+            egui_winit_state,
+            egui_renderer,
+            lab: LabState::default(),
             last_redraw: Instant::now(),
             fps: 0.0,
             last_diag: None,
-            diag_interval: 300,
+            diag_interval: self.config.diag_interval.max(1),
         });
 
         // Initial redraw — required on macOS with winit 0.30
@@ -137,19 +207,26 @@ impl ApplicationHandler for App {
             return;
         };
 
+        // Pass events to egui first
+        let egui_response = state.egui_winit_state.on_window_event(&state.window, &event);
+
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
 
             WindowEvent::KeyboardInput { event, .. } => {
-                handle_keyboard(state, event_loop, &event);
+                // Always handle global hotkeys (F1, F9, F12, Escape)
+                // Other keys only if egui didn't consume them
+                handle_keyboard(state, event_loop, &event, egui_response.consumed);
             }
 
             WindowEvent::MouseWheel { delta, .. } => {
-                let scroll = match &delta {
-                    MouseScrollDelta::LineDelta(_, y) => *y,
-                    MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.01,
-                };
-                state.camera.apply_scroll(scroll);
+                if !egui_response.consumed {
+                    let scroll = match &delta {
+                        MouseScrollDelta::LineDelta(_, y) => *y,
+                        MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.01,
+                    };
+                    state.camera.apply_scroll(scroll);
+                }
             }
 
             WindowEvent::Resized(new_size) => {
@@ -229,7 +306,7 @@ async fn init_gpu(
     };
 
     let surface_config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         format: surface_format,
         width: size.width.max(1),
         height: size.height.max(1),
@@ -248,21 +325,39 @@ fn handle_keyboard(
     state: &mut AppState,
     event_loop: &winit::event_loop::ActiveEventLoop,
     event: &winit::event::KeyEvent,
+    egui_consumed: bool,
 ) {
     let pressed = event.state.is_pressed();
 
+    // Global hotkeys — always handled, even when egui has focus
     match &event.logical_key {
         Key::Named(NamedKey::Escape) if pressed => event_loop.exit(),
+        Key::Named(NamedKey::F1) if pressed => {
+            state.lab.show_lab_ui = !state.lab.show_lab_ui;
+            log::info!("Lab UI: {}", if state.lab.show_lab_ui { "ON" } else { "OFF" });
+        }
+        Key::Named(NamedKey::F9) if pressed => {
+            state.lab.show_analysis_panel = !state.lab.show_analysis_panel;
+        }
+        Key::Named(NamedKey::F12) if pressed => {
+            state.lab.screenshot_requested = true;
+            state.lab.log_event(state.world.frame, "SCREENSHOT", "Screenshot requested (F12)");
+        }
+        _ => {}
+    }
 
+    // Simulation controls — only if egui didn't consume the event
+    if egui_consumed {
+        return;
+    }
+
+    match &event.logical_key {
         Key::Named(NamedKey::Space) if pressed => {
             state.sim_params.paused = !state.sim_params.paused;
-            log::info!(
-                "Simulation {}",
-                if state.sim_params.paused {
-                    "PAUSED"
-                } else {
-                    "RESUMED"
-                }
+            state.lab.log_event(
+                state.world.frame,
+                "CONTROL",
+                if state.sim_params.paused { "Paused" } else { "Resumed" },
             );
         }
 
@@ -274,21 +369,10 @@ fn handle_keyboard(
             "q" | "Q" => state.keys.q = pressed,
             "e" | "E" => state.keys.e = pressed,
             "r" | "R" if pressed => {
-                log::info!("Restarting simulation...");
-                state.world = WorldState::new(&state.device);
-                state.pipelines =
-                    create_pipelines(&state.device, &state.world, state.surface_config.format);
+                state.lab.restart_requested = true;
             }
             "h" | "H" if pressed => {
                 state.sim_params.show_extended_ui = !state.sim_params.show_extended_ui;
-                log::info!(
-                    "Extended HUD: {}",
-                    if state.sim_params.show_extended_ui {
-                        "ON"
-                    } else {
-                        "OFF"
-                    }
-                );
             }
             "1" if pressed => state.sim_params.visualization_mode = 0,
             "2" if pressed => state.sim_params.visualization_mode = 1,
@@ -304,10 +388,6 @@ fn handle_keyboard(
                 };
                 state.surface_config.present_mode = mode;
                 state.surface.configure(&state.device, &state.surface_config);
-                log::info!(
-                    "VSync: {}",
-                    if state.sim_params.vsync { "ON" } else { "OFF" }
-                );
             }
             "[" if pressed => {
                 state.sim_params.mutation_rate =
@@ -321,15 +401,21 @@ fn handle_keyboard(
         },
 
         Key::Named(named) => match named {
+            NamedKey::Tab if pressed => {
+                state.sim_params.visualization_mode =
+                    (state.sim_params.visualization_mode + 1) % 5;
+            }
             NamedKey::ArrowUp if pressed => {
-                state.sim_params.time_step = (state.sim_params.time_step * 1.1).min(2.0);
+                state.sim_params.time_step =
+                    (state.sim_params.time_step * 1.1).min(2.0);
             }
             NamedKey::ArrowDown if pressed => {
-                state.sim_params.time_step = (state.sim_params.time_step * 0.9).max(0.1);
+                state.sim_params.time_step =
+                    (state.sim_params.time_step * 0.9).max(0.1);
             }
             NamedKey::ArrowRight if pressed => {
                 state.sim_params.simulation_speed =
-                    (state.sim_params.simulation_speed + 1).min(10);
+                    (state.sim_params.simulation_speed + 1).min(20);
             }
             NamedKey::ArrowLeft if pressed => {
                 state.sim_params.simulation_speed =
@@ -379,30 +465,61 @@ fn redraw(state: &mut AppState) {
         bytemuck::bytes_of(&render_params),
     );
 
-    // Prepare HUD
+    // ---- egui frame ----
+    let raw_input = state.egui_winit_state.take_egui_input(&state.window);
+    let full_output = state.egui_ctx.run(raw_input, |ctx| {
+        lab_ui::render_lab_ui(ctx, &mut state.sim_params, &mut state.lab);
+    });
+    state
+        .egui_winit_state
+        .handle_platform_output(&state.window, full_output.platform_output);
+
+    // ---- Handle lab actions ----
+    // Restart
+    if state.lab.restart_requested {
+        let seed = state.sim_params.effective_seed();
+        state.world = WorldState::new_with_seed(&state.device, seed);
+        state.pipelines =
+            create_pipelines(&state.device, &state.world, state.surface_config.format);
+        state.lab.restart_requested = false;
+        state.last_diag = None;
+        state.lab.log_event(state.world.frame, "RESTART", "Simulation restarted");
+        if let Some(s) = seed {
+            state.lab.log_event(state.world.frame, "SEED", &format!("Seed: {}", s));
+        }
+        log::info!("Simulation restarted (seed: {:?})", seed);
+    }
+
+    // Update diag interval from lab UI
+    state.diag_interval = state.lab.metrics_sample_interval.max(1);
+
+    // ---- Prepare HUD (only when Lab UI hidden, to avoid overlap) ----
     let win_w = state.surface_config.width;
     let win_h = state.surface_config.height;
-    state.hud.prepare(
-        &state.device,
-        &state.queue,
-        &state.sim_params,
-        state.world.frame,
-        state.fps,
-        state.camera.zoom,
-        win_w,
-        win_h,
-    );
+    if !state.lab.show_lab_ui {
+        state.hud.prepare(
+            &state.device,
+            &state.queue,
+            &state.sim_params,
+            state.world.frame,
+            state.fps,
+            state.camera.zoom,
+            win_w,
+            win_h,
+        );
+    }
 
     let dispatch_x = (WORLD_WIDTH + WORKGROUP_X - 1) / WORKGROUP_X;
     let dispatch_y = (WORLD_HEIGHT + WORKGROUP_Y - 1) / WORKGROUP_Y;
     let dispatch_linear = (total_pixels() + 255) / 256;
 
-    // Run N simulation steps per frame (multi-step for higher throughput)
+    // ---- Simulation steps ----
     if !state.sim_params.paused {
         let steps = state.sim_params.simulation_speed;
         for _ in 0..steps {
-            state.world.update_uniforms(&state.queue);
-            state.queue.write_buffer(&state.world.mass_sum, 0, &[0u8; 8]);
+            state
+                .world
+                .update_step_uniforms_dynamic(&state.queue, &state.sim_params);
 
             let cur = state.world.cur();
             let mut sim_encoder = state
@@ -421,11 +538,32 @@ fn redraw(state: &mut AppState) {
             state.queue.submit(std::iter::once(sim_encoder.finish()));
             state.world.swap();
         }
+    } else if state.lab.step_requested {
+        // Single step while paused
+        state
+            .world
+            .update_step_uniforms_dynamic(&state.queue, &state.sim_params);
+        let cur = state.world.cur();
+        let mut sim_encoder = state
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("step_encoder"),
+            });
+        encode_simulation_passes(
+            &mut sim_encoder,
+            &state.pipelines,
+            cur,
+            dispatch_x,
+            dispatch_y,
+            dispatch_linear,
+        );
+        state.queue.submit(std::iter::once(sim_encoder.finish()));
+        state.world.swap();
+        state.lab.step_requested = false;
+        state.lab.log_event(state.world.frame, "CONTROL", "Single step");
     }
 
-    // ---- Render pass (once per frame, reads latest simulation data) ----
-    // After multi-step, world.cur() is up to date. render_bind_groups[1-cur]
-    // reads the buffer that was last written to.
+    // ---- Render pass ----
     let render_cur = 1 - state.world.cur();
     let mut encoder = state
         .device
@@ -433,7 +571,6 @@ fn redraw(state: &mut AppState) {
             label: Some("render_encoder"),
         });
 
-    // Render pass
     let output = match state.surface.get_current_texture() {
         Ok(t) => t,
         Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
@@ -450,6 +587,7 @@ fn redraw(state: &mut AppState) {
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
 
+    // Simulation render pass
     {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("render_pass"),
@@ -474,26 +612,237 @@ fn redraw(state: &mut AppState) {
         pass.set_bind_group(0, &state.pipelines.render_bind_groups[render_cur], &[]);
         pass.draw(0..6, 0..1);
 
-        // HUD overlay
-        state.hud.render(&mut pass);
+        // HUD overlay (only when Lab UI hidden)
+        if !state.lab.show_lab_ui {
+            state.hud.render(&mut pass);
+        }
     }
 
+    // ---- Screenshot capture (from simulation render, before egui overlay) ----
+    let do_screenshot = state.lab.screenshot_requested;
+    let mut screenshot_staging: Option<wgpu::Buffer> = None;
+    let mut screenshot_padded_bpr: u32 = 0;
+
+    if do_screenshot {
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let unpadded_bpr = win_w * 4;
+        let padded_bpr = (unpadded_bpr + align - 1) / align * align;
+        screenshot_padded_bpr = padded_bpr;
+
+        let staging = state.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("screenshot_staging"),
+            size: (padded_bpr * win_h) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &output.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &staging,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bpr),
+                    rows_per_image: Some(win_h),
+                },
+            },
+            wgpu::Extent3d {
+                width: win_w,
+                height: win_h,
+                depth_or_array_layers: 1,
+            },
+        );
+        screenshot_staging = Some(staging);
+    }
+
+    // Submit the simulation render encoder (with optional screenshot copy)
     state.queue.submit(std::iter::once(encoder.finish()));
+
+    // ---- egui render pass (on top of simulation, separate encoder) ----
+    let paint_jobs = state
+        .egui_ctx
+        .tessellate(full_output.shapes, full_output.pixels_per_point);
+
+    for (id, image_delta) in &full_output.textures_delta.set {
+        state
+            .egui_renderer
+            .update_texture(&state.device, &state.queue, *id, image_delta);
+    }
+
+    let screen_descriptor = egui_wgpu::ScreenDescriptor {
+        size_in_pixels: [win_w, win_h],
+        pixels_per_point: full_output.pixels_per_point,
+    };
+
+    let mut egui_encoder = state
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("egui_encoder"),
+        });
+
+    state.egui_renderer.update_buffers(
+        &state.device,
+        &state.queue,
+        &mut egui_encoder,
+        &paint_jobs,
+        &screen_descriptor,
+    );
+
+    render_egui_pass(
+        &state.egui_renderer,
+        &mut egui_encoder,
+        &view,
+        &paint_jobs,
+        &screen_descriptor,
+    );
+
+    state.queue.submit(std::iter::once(egui_encoder.finish()));
+
+    // ---- Read back screenshot ----
+    if do_screenshot {
+        if let Some(staging) = &screenshot_staging {
+            let slice = staging.slice(..);
+            let (tx, rx) = std::sync::mpsc::channel();
+            slice.map_async(wgpu::MapMode::Read, move |result| {
+                let _ = tx.send(result);
+            });
+            state.device.poll(wgpu::Maintain::Wait);
+
+            if let Ok(Ok(())) = rx.recv() {
+                let data = slice.get_mapped_range();
+                // Extract RGBA data, removing row padding & swapping BGRA→RGBA
+                let mut rgba = Vec::with_capacity((win_w * win_h * 4) as usize);
+                for row in 0..win_h {
+                    let start = (row * screenshot_padded_bpr) as usize;
+                    let end = start + (win_w * 4) as usize;
+                    let row_data = &data[start..end];
+                    for chunk in row_data.chunks_exact(4) {
+                        // BGRA → RGBA swap
+                        rgba.push(chunk[2]); // R
+                        rgba.push(chunk[1]); // G
+                        rgba.push(chunk[0]); // B
+                        rgba.push(chunk[3]); // A
+                    }
+                }
+                drop(data);
+                staging.unmap();
+
+                match state.lab.save_screenshot(
+                    state.world.frame,
+                    win_w,
+                    win_h,
+                    &rgba,
+                    state.sim_params.visualization_mode,
+                ) {
+                    Ok(path) => {
+                        state.lab.set_status(format!("Screenshot saved: {:?}", path));
+                        state.lab.log_event(
+                            state.world.frame,
+                            "SCREENSHOT",
+                            &format!("Saved to {:?}", path),
+                        );
+                    }
+                    Err(e) => {
+                        state.lab.set_status(format!("Screenshot failed: {}", e));
+                        log::error!("Screenshot failed: {}", e);
+                    }
+                }
+            }
+        }
+        state.lab.screenshot_requested = false;
+    }
+
+    // ---- Snapshot (state save) ----
+    if state.lab.snapshot_requested {
+        if let Some(snap) = state.world.readback_snapshot(&state.device, &state.queue) {
+            let path = state
+                .lab
+                .run_dir
+                .join(format!("snapshot_frame{:06}.snap", state.world.frame));
+            match state_io::save_snapshot(path.to_str().unwrap_or("snapshot.snap"), &snap) {
+                Ok(()) => {
+                    state
+                        .lab
+                        .set_status(format!("Snapshot saved: {:?}", path));
+                    state.lab.log_event(
+                        state.world.frame,
+                        "SNAPSHOT",
+                        &format!("Saved to {:?}", path),
+                    );
+                }
+                Err(e) => {
+                    log::error!("Snapshot save failed: {}", e);
+                    state.lab.set_status(format!("Snapshot failed: {}", e));
+                }
+            }
+        }
+        state.lab.snapshot_requested = false;
+    }
+
     output.present();
+
+    for id in &full_output.textures_delta.free {
+        state.egui_renderer.free_texture(id);
+    }
     state.hud.trim();
 
-    // Periodic diagnostics via GPU readback
-    if !state.sim_params.paused && state.world.frame > 0 && state.world.frame % state.diag_interval == 0 {
+    // ---- Periodic diagnostics ----
+    if !state.sim_params.paused
+        && state.world.frame > 0
+        && state.world.frame % state.diag_interval == 0
+    {
         if let Some(snap) = state.world.readback_snapshot(&state.device, &state.queue) {
             let diag = SimDiagnostics::from_snapshot(&snap);
-            diag.log(state.world.frame, target_total_mass(), state.last_diag.as_ref());
+            state
+                .lab
+                .record_metrics(&diag, state.world.frame, state.fps);
+            diag.log(
+                state.world.frame,
+                target_total_mass(),
+                state.last_diag.as_ref(),
+            );
             state.last_diag = Some(diag);
-        } else {
-            log::warn!("Frame {} | GPU readback failed", state.world.frame);
         }
     }
 
     state.window.request_redraw();
+}
+
+// ======================== egui Render Helper ========================
+
+/// Render egui paint jobs into a render pass.
+/// Extracted as a free function to decouple the egui::Renderer lifetime
+/// from the AppState borrow, allowing the render pass encoder to be local.
+fn render_egui_pass(
+    renderer: &egui_wgpu::Renderer,
+    encoder: &mut wgpu::CommandEncoder,
+    view: &wgpu::TextureView,
+    paint_jobs: &[egui::ClippedPrimitive],
+    screen_descriptor: &egui_wgpu::ScreenDescriptor,
+) {
+    let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("egui_render_pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+    });
+    // forget_lifetime converts RenderPass<'encoder> → RenderPass<'static>
+    // which is required by egui_wgpu::Renderer::render in wgpu 24.
+    let mut pass = pass.forget_lifetime();
+    renderer.render(&mut pass, paint_jobs, screen_descriptor);
 }
 
 // ======================== Simulation Encoding ========================

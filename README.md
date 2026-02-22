@@ -40,6 +40,46 @@ cargo run --release
 
 The simulation window will open immediately. Wait a few seconds for complex patterns to emerge.
 
+### Fast Long Runs (Headless → GUI)
+Use `run.sh` to simplify batch + replay workflows:
+
+```bash
+# Normal GUI
+./run.sh gui
+
+# Headless long run, save final state
+./run.sh headless 500000 /tmp/evo_long.snap
+
+# Headless then open the final state directly in GUI
+./run.sh headless-view 200000 /tmp/evo_final.snap
+
+# Re-open a saved state in GUI
+./run.sh replay /tmp/evo_final.snap
+
+# One-command long experiment (auto timestamped snapshot + log)
+./run.sh experiment 5000000 baselineA
+
+# Same experiment with default frames (5M)
+./run.sh experiment baselineA
+
+# Same as experiment, then opens GUI replay automatically
+./run.sh experiment-view 5000000 baselineA
+```
+
+`experiment` writes outputs to `/tmp/evolenia_runs/` with automatic names:
+- `baselineA_YYYYMMDD_HHMMSS.snap`
+- `baselineA_YYYYMMDD_HHMMSS.log`
+
+At the end, it prints the exact replay command to open the final state in GUI.
+`experiment-view` opens that replay automatically.
+
+Equivalent raw CLI:
+
+```bash
+cargo run --release -- --headless --frames 500000 --save /tmp/evo.snap
+cargo run --release -- --load /tmp/evo.snap
+```
+
 ---
 
 ## 🎮 Controls
@@ -52,7 +92,7 @@ The simulation window will open immediately. Wait a few seconds for complex patt
 | **Space**          | Pause/Resume simulation                   |
 | **R**              | Restart with new random seed              |
 | **H**              | Toggle Extended HUD (shows all parameters)|
-| **1-5**            | Change visualization mode (see below)     |
+| **1-5 / Tab**      | Change visualization mode (see below)     |
 | **↑ / ↓**          | Increase/Decrease time step (0.1x - 2.0x) |
 | **← / →**          | Decrease/Increase simulation speed (1-10x)|
 | **[ / ]**          | Decrease/Increase mutation rate (0.1x - 5.0x)|

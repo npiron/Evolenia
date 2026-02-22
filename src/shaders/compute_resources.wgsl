@@ -11,8 +11,12 @@
 struct Params {
     width: u32,
     height: u32,
-    frame: u32,
-    _pad: u32,
+    diffusion: f32,
+    feed_rate: f32,
+    consumption: f32,
+    _pad1: u32,
+    _pad2: u32,
+    _pad3: u32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -47,13 +51,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let laplacian = (r_right + r_left + r_up + r_down - 4.0 * r) / 4.0;
 
-    // Gray-Scott dynamics:
-    // - Diffusion: nutrients spread spatially (D_R = 0.08)
-    // - Feed: nutrients regenerate toward 1.0 (feed_rate = 0.010) — slower regeneration
+    // Gray-Scott dynamics (parameterized via uniforms):
+    // - Diffusion: nutrients spread spatially
+    // - Feed: nutrients regenerate toward 1.0
     // - Consumption: organisms consume nutrients proportional to their mass
-    let diffusion     = 0.08 * laplacian;
-    let feed          = 0.010 * (1.0 - r);
-    let consumed      = r * m * 0.08;
+    let diffusion     = params.diffusion * laplacian;
+    let feed          = params.feed_rate * (1.0 - r);
+    let consumed      = r * m * params.consumption;
 
     let r_new = clamp(r + diffusion + feed - consumed, 0.0, 1.0);
 

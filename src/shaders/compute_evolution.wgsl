@@ -15,6 +15,10 @@ struct Params {
     height: u32,
     frame: u32,
     dt: f32,
+    mutation_rate_mult: f32,
+    predation_factor: f32,
+    _pad1: u32,
+    _pad2: u32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -128,7 +132,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let r_small = 3.0;
     let r_mid   = 5.0;
     let r_large = 9.0;
-    let max_r   = 9;  // Balanced default: respects full evolved radius range up to 9
+    let max_r   = 6;  // Balanced default: respects full evolved radius range up to 9
 
     var U = 0.0; // Perceived density (convolution result)
     var kernel_sum = 0.0;
@@ -188,8 +192,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Aggressivity has an additional metabolic penalty (predators need more energy)
     let genomic_complexity = length(vec3<f32>(mu, sigma, agg));
     let radius_penalty = (r / 9.0) * 0.02;
-    let agg_penalty = agg * agg * 0.04;
-    let predator_interference = agg * agg * agg * 0.02;
+    let agg_penalty = agg * agg * 0.04 * params.predation_factor;
+    let predator_interference = agg * agg * agg * 0.02 * params.predation_factor;
     let cost = (genomic_complexity * 0.02 + radius_penalty + agg_penalty + predator_interference) * m;
     // Absorption from local resource map (nutrient uptake)
     // Break-even at ~30% resource depletion → meaningful survival pressure
@@ -281,14 +285,15 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         let noise_mut = rand_signed(seed);
 
         // Mutate each gene with rate-scaled noise — smaller steps to avoid genome drift
-        genome_a_new.x = clamp(genome_a_new.x + noise_r     * mut_rate * 4.0,  2.0, 9.0);
-        genome_a_new.y = clamp(genome_a_new.y + noise_mu    * mut_rate * 0.3,  0.05, 0.5);
-        genome_a_new.z = clamp(genome_a_new.z + noise_sigma * mut_rate * 0.15, 0.02, 0.2);
-        genome_a_new.w = clamp(genome_a_new.w + noise_agg   * mut_rate * 0.5,  0.0, 1.0);
+        let mm = params.mutation_rate_mult;
+        genome_a_new.x = clamp(genome_a_new.x + noise_r     * mut_rate * mm * 4.0,  2.0, 9.0);
+        genome_a_new.y = clamp(genome_a_new.y + noise_mu    * mut_rate * mm * 0.3,  0.05, 0.5);
+        genome_a_new.z = clamp(genome_a_new.z + noise_sigma * mut_rate * mm * 0.15, 0.02, 0.2);
+        genome_a_new.w = clamp(genome_a_new.w + noise_agg   * mut_rate * mm * 0.5,  0.0, 1.0);
 
         // Meta-mutation: mutation rate evolves too (smaller step)
         // Beta-prior prevents drift to 0 or 1
-        genome_b_new = clamp(genome_b_new + noise_mut * 0.0003, 0.001, 0.01);
+        genome_b_new = clamp(genome_b_new + noise_mut * mm * 0.0003, 0.001, 0.01);
     }
 
     // ================== WRITE OUTPUTS ==================

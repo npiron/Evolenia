@@ -135,7 +135,7 @@ fn build_hud_text(params: &SimulationParams, frame: u32, fps: f32, camera_zoom: 
             "━━━ EvoLenia v2.0 — Extended HUD ━━━\n\
              Frame: {}   FPS: {:.0}{}  |  Zoom: {:.2}x\n\
              \n\
-             VISUALIZATION (1-5):\n\
+             VISUALIZATION (1-5 / Tab):\n\
              • Current: {} (<)✓(>)\n\
              • 1: Species Color  2: Energy  3: Mass  4: Diversity  5: Predator/Prey\n\
              \n\
@@ -166,7 +166,7 @@ fn build_hud_text(params: &SimulationParams, frame: u32, fps: f32, camera_zoom: 
     } else {
         format!(
             "Frame: {}   FPS: {:.0}{}   Zoom: {:.2}x\n\
-             Mode: {} (1-5) | Space: Pause | R: Restart | H: Help",
+             Mode: {} (1-5/Tab) | Space: Pause | R: Restart | H: Help",
             frame,
             fps,
             pause_status,
