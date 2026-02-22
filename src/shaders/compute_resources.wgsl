@@ -48,12 +48,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let laplacian = (r_right + r_left + r_up + r_down - 4.0 * r) / 4.0;
 
     // Gray-Scott dynamics:
-    // - Diffusion: nutrients spread spatially (D_R = 0.1)
-    // - Feed: nutrients regenerate toward 1.0 (feed_rate = 0.04)
+    // - Diffusion: nutrients spread spatially (D_R = 0.08)
+    // - Feed: nutrients regenerate toward 1.0 (feed_rate = 0.010) — slower regeneration
     // - Consumption: organisms consume nutrients proportional to their mass
-    let diffusion     = 0.1 * laplacian;
-    let feed          = 0.04 * (1.0 - r);
-    let consumed      = r * m * 0.05;
+    let diffusion     = 0.08 * laplacian;
+    let feed          = 0.010 * (1.0 - r);
+    let consumed      = r * m * 0.08;
 
     let r_new = clamp(r + diffusion + feed - consumed, 0.0, 1.0);
 

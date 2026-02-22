@@ -56,24 +56,21 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // Predation flux component: predators push mass toward weaker neighbors
     if (agg > 0.5 && m_center > 0.01) {
-        // Check each cardinal neighbor for predation opportunity
-        let neighbors = array<vec2<f32>, 4>(
-            vec2<f32>(1.0, 0.0),   // right
-            vec2<f32>(-1.0, 0.0),  // left
-            vec2<f32>(0.0, -1.0),  // up
-            vec2<f32>(0.0, 1.0)    // down
-        );
-
-        let m_neighbors = array<f32, 4>(m_right, m_left, m_up, m_down);
-
         var predation_vel = vec2<f32>(0.0, 0.0);
-        for (var n = 0u; n < 4u; n = n + 1u) {
-            let diff = m_center - m_neighbors[n];
-            if (diff > 0.0) {
-                // Predation: flow toward weaker neighbor
-                predation_vel += neighbors[n] * agg * diff * 0.02;
-            }
-        }
+
+        // right
+        let diff0 = m_center - m_right;
+        if (diff0 > 0.0) { predation_vel += vec2<f32>(1.0, 0.0) * agg * diff0 * 0.008; }
+        // left
+        let diff1 = m_center - m_left;
+        if (diff1 > 0.0) { predation_vel += vec2<f32>(-1.0, 0.0) * agg * diff1 * 0.008; }
+        // up
+        let diff2 = m_center - m_up;
+        if (diff2 > 0.0) { predation_vel += vec2<f32>(0.0, -1.0) * agg * diff2 * 0.008; }
+        // down
+        let diff3 = m_center - m_down;
+        if (diff3 > 0.0) { predation_vel += vec2<f32>(0.0, 1.0) * agg * diff3 * 0.008; }
+
         vel += predation_vel;
     }
 

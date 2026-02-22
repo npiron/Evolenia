@@ -88,13 +88,47 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Base seed for PRNG — unique per pixel per frame
     let base_seed = (gid.y * params.width + gid.x) ^ params.frame ^ 0xDEADBEEFu;
 
+    // ================== EARLY EXIT FOR EMPTY REGIONS ==================
+    // Skip the expensive convolution (~169 global reads) for dead pixels
+    // with no living neighbors within kernel range. With ~85% fill=0,
+    // this skips the majority of compute work.
+    if (m < 0.001) {
+        let max_r_i = 9;
+        let hr = max_r_i / 2;
+        // Sparse 12-point check: cardinal at max_r, diagonals at half, immediate neighbors
+        let has_life =
+            mass_in[idx(x + max_r_i, y)] > 0.001 ||
+            mass_in[idx(x - max_r_i, y)] > 0.001 ||
+            mass_in[idx(x, y + max_r_i)] > 0.001 ||
+            mass_in[idx(x, y - max_r_i)] > 0.001 ||
+            mass_in[idx(x + hr, y + hr)] > 0.001 ||
+            mass_in[idx(x - hr, y + hr)] > 0.001 ||
+            mass_in[idx(x + hr, y - hr)] > 0.001 ||
+            mass_in[idx(x - hr, y - hr)] > 0.001 ||
+            mass_in[idx(x + 1, y)] > 0.001 ||
+            mass_in[idx(x - 1, y)] > 0.001 ||
+            mass_in[idx(x, y + 1)] > 0.001 ||
+            mass_in[idx(x, y - 1)] > 0.001;
+
+        if (!has_life) {
+            mass_out[i] = 0.0;
+            energy_out[i] = e;
+            genome_a_out[i] = ga;
+            genome_b_out[i] = gb;
+            return;
+        }
+    }
+
     // ================== LENIA CONVOLUTION ==================
-    // Blend between three fixed kernel radii (3, 7, 14) based on genome radius
-    // This avoids dynamic kernel sizes which are expensive on GPU
+    // Blend between three fixed kernel radii (3, 5, 9) — reduced max to 9 for stability and speed
+    // Performance tuning:
+    // - max_r = 6  → 13×13 = 169 samples (2× faster, good for development)
+    // - max_r = 9  → 19×19 = 361 samples (balanced, default)
+    // - max_r = 12 → 25×25 = 625 samples (highest quality, slow)
     let r_small = 3.0;
-    let r_mid   = 7.0;
-    let r_large = 14.0;
-    let max_r   = 14;
+    let r_mid   = 5.0;
+    let r_large = 9.0;
+    let max_r   = 9;  // Balanced default: respects full evolved radius range up to 9
 
     var U = 0.0; // Perceived density (convolution result)
     var kernel_sum = 0.0;
@@ -151,15 +185,22 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // ================== METABOLISM ==================
     // Cost scales with genomic complexity (Darwinian parsimony)
+    // Aggressivity has an additional metabolic penalty (predators need more energy)
     let genomic_complexity = length(vec3<f32>(mu, sigma, agg));
-    let cost = genomic_complexity * m * 0.01;
+    let radius_penalty = (r / 9.0) * 0.02;
+    let agg_penalty = agg * agg * 0.04;
+    let predator_interference = agg * agg * agg * 0.02;
+    let cost = (genomic_complexity * 0.02 + radius_penalty + agg_penalty + predator_interference) * m;
     // Absorption from local resource map (nutrient uptake)
-    let absorption = resource_map[i] * m * 0.05;
+    // Break-even at ~30% resource depletion → meaningful survival pressure
+    let prey_bonus = (1.0 - agg) * 0.010;
+    let absorption = resource_map[i] * m * (0.032 + prey_bonus);
     var energy_new = clamp(e + absorption - cost, 0.0, 1.0);
 
-    // Starvation: gradual mass decay when energy depleted
-    if (energy_new <= 0.0) {
-        mass_candidate *= 0.99;
+    // Starvation: significant mass decay when energy depleted
+    if (energy_new <= 0.05) {
+        let starvation_severity = 1.0 - energy_new / 0.05; // 0 at e=0.05, 1 at e=0
+        mass_candidate *= 1.0 - 0.05 * starvation_severity; // up to 5% mass loss per step
     }
 
     // ================== MASS-CONSERVATIVE ADVECTION ==================
@@ -167,39 +208,27 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let vel = velocity[i];
 
     // Cardinal direction vectors
-    let dirs = array<vec2<f32>, 4>(
-        vec2<f32>(1.0, 0.0),   // right
-        vec2<f32>(-1.0, 0.0),  // left
-        vec2<f32>(0.0, 1.0),   // down
-        vec2<f32>(0.0, -1.0)   // up
-    );
-
-    let neighbor_offsets = array<vec2<i32>, 4>(
-        vec2<i32>(1, 0),
-        vec2<i32>(-1, 0),
-        vec2<i32>(0, 1),
-        vec2<i32>(0, -1)
-    );
-
     var total_flux_out = 0.0;
     var total_flux_in = 0.0;
 
-    // Flux limiters: cannot send more than M/4 to any single neighbor
-    for (var n = 0u; n < 4u; n = n + 1u) {
-        // Outgoing flux from self to neighbor
-        let flux_component = dot(vel, dirs[n]);
-        let flux_out = clamp(flux_component, 0.0, mass_candidate / 4.0);
-        total_flux_out += flux_out;
-
-        // Incoming flux from neighbor to self
-        let ni = idx(x + neighbor_offsets[n].x, y + neighbor_offsets[n].y);
-        let vel_n = velocity[ni];
-        let mass_n = mass_in[ni];
-        // Neighbor's flux toward us = their velocity projected onto -dir
-        let flux_in_component = dot(vel_n, -dirs[n]);
-        let flux_in = clamp(flux_in_component, 0.0, mass_n / 4.0);
-        total_flux_in += flux_in;
-    }
+    // Flux limiters — unrolled (WGSL requires constant indices for local arrays)
+    // Cap per direction = mass/8 (not /4): prevents >50% total outflow per step
+    // right
+    { let fc = dot(vel, vec2<f32>(1.0, 0.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 8.0);
+      let ni = idx(x + 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
+      let fi = dot(vn, vec2<f32>(-1.0, 0.0)); total_flux_in += clamp(fi, 0.0, mn / 8.0); }
+    // left
+    { let fc = dot(vel, vec2<f32>(-1.0, 0.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 8.0);
+      let ni = idx(x - 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
+      let fi = dot(vn, vec2<f32>(1.0, 0.0)); total_flux_in += clamp(fi, 0.0, mn / 8.0); }
+    // down
+    { let fc = dot(vel, vec2<f32>(0.0, 1.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 8.0);
+      let ni = idx(x, y + 1); let vn = velocity[ni]; let mn = mass_in[ni];
+      let fi = dot(vn, vec2<f32>(0.0, -1.0)); total_flux_in += clamp(fi, 0.0, mn / 8.0); }
+    // up
+    { let fc = dot(vel, vec2<f32>(0.0, -1.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 8.0);
+      let ni = idx(x, y - 1); let vn = velocity[ni]; let mn = mass_in[ni];
+      let fi = dot(vn, vec2<f32>(0.0, 1.0)); total_flux_in += clamp(fi, 0.0, mn / 8.0); }
 
     var mass_new = mass_candidate + total_flux_in - total_flux_out;
     mass_new = clamp(mass_new, 0.0, 1.0);
@@ -212,23 +241,27 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     var genome_b_new = gb;
 
     var seed = base_seed;
-    for (var n = 0u; n < 4u; n = n + 1u) {
-        let ni = idx(x + neighbor_offsets[n].x, y + neighbor_offsets[n].y);
-        let vel_n = velocity[ni];
-        let mass_n = mass_in[ni];
-        let flux_in_component = dot(vel_n, -dirs[n]);
-        let flux_in = clamp(flux_in_component, 0.0, mass_n / 4.0);
-
-        if (flux_in > 0.001) {
-            // Colonization probability: larger flux → higher chance of replacement
-            let p_replace = flux_in / (mass_new + 0.001);
-            seed = pcg_hash(seed + n + 1u);
-            if (rand01(seed) < p_replace) {
-                genome_a_new = genome_a_in[ni]; // Colonizer's genome wins
-                genome_b_new = genome_b_in[ni];
-            }
-        }
-    }
+    // Genome advection — unrolled
+    // right
+    { let ni = idx(x + 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
+      let fi = clamp(dot(vn, vec2<f32>(-1.0, 0.0)), 0.0, mn / 4.0);
+      if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 1u);
+        if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
+    // left
+    { let ni = idx(x - 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
+      let fi = clamp(dot(vn, vec2<f32>(1.0, 0.0)), 0.0, mn / 4.0);
+      if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 2u);
+        if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
+    // down
+    { let ni = idx(x, y + 1); let vn = velocity[ni]; let mn = mass_in[ni];
+      let fi = clamp(dot(vn, vec2<f32>(0.0, -1.0)), 0.0, mn / 4.0);
+      if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 3u);
+        if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
+    // up
+    { let ni = idx(x, y - 1); let vn = velocity[ni]; let mn = mass_in[ni];
+      let fi = clamp(dot(vn, vec2<f32>(0.0, 1.0)), 0.0, mn / 4.0);
+      if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 4u);
+        if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
 
     // ================== MUTATIONS ==================
     // Only living cells mutate (dead cells are inert)
@@ -247,15 +280,15 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         seed = pcg_hash(seed + 104u);
         let noise_mut = rand_signed(seed);
 
-        // Mutate each gene with rate-scaled noise
-        genome_a_new.x = clamp(genome_a_new.x + noise_r * mut_rate * 14.0, 2.0, 16.0);
-        genome_a_new.y = clamp(genome_a_new.y + noise_mu * mut_rate, 0.0, 1.0);
-        genome_a_new.z = clamp(genome_a_new.z + noise_sigma * mut_rate * 0.3, 0.01, 0.3);
-        genome_a_new.w = clamp(genome_a_new.w + noise_agg * mut_rate, 0.0, 1.0);
+        // Mutate each gene with rate-scaled noise — smaller steps to avoid genome drift
+        genome_a_new.x = clamp(genome_a_new.x + noise_r     * mut_rate * 4.0,  2.0, 9.0);
+        genome_a_new.y = clamp(genome_a_new.y + noise_mu    * mut_rate * 0.3,  0.05, 0.5);
+        genome_a_new.z = clamp(genome_a_new.z + noise_sigma * mut_rate * 0.15, 0.02, 0.2);
+        genome_a_new.w = clamp(genome_a_new.w + noise_agg   * mut_rate * 0.5,  0.0, 1.0);
 
         // Meta-mutation: mutation rate evolves too (smaller step)
         // Beta-prior prevents drift to 0 or 1
-        genome_b_new = clamp(genome_b_new + noise_mut * 0.001, 0.0001, 0.05);
+        genome_b_new = clamp(genome_b_new + noise_mut * 0.0003, 0.001, 0.01);
     }
 
     // ================== WRITE OUTPUTS ==================

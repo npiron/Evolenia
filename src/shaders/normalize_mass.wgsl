@@ -53,8 +53,10 @@ fn normalize(@builtin(global_invocation_id) gid: vec3<u32>) {
     let target_total = f32(params.target_mass_x1000) / 1000.0;
 
     if (actual_total > 0.001) {
-        let correction = target_total / actual_total;
-        // Apply correction factor, clamped to avoid extreme values
+        let raw_correction = target_total / actual_total;
+        // Soft correction: blend toward target with damping factor (0.3 = 30% per step)
+        // Strong enough to prevent runaway growth, soft enough to allow natural oscillations
+        let correction = 1.0 + (raw_correction - 1.0) * 0.3;
         let corrected = clamp(mass[gid.x] * correction, 0.0, 1.0);
         mass[gid.x] = corrected;
     }
