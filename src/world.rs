@@ -43,8 +43,12 @@ pub struct SimParams {
     pub dt: f32,
     pub mutation_rate_mult: f32,
     pub predation_factor: f32,
+    pub radius_cost_exp: f32,
+    pub agg_mobility: f32,
+    pub starvation_severity: f32,
     pub _pad1: u32,
     pub _pad2: u32,
+    pub _pad3: u32,
 }
 
 #[repr(C)]
@@ -492,8 +496,12 @@ impl WorldState {
             dt: DT,
             mutation_rate_mult: 1.0,
             predation_factor: 1.0,
+            radius_cost_exp: 1.5,
+            agg_mobility: 0.3,
+            starvation_severity: 0.05,
             _pad1: 0,
             _pad2: 0,
+            _pad3: 0,
         };
         let sim_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("sim_params"),
@@ -676,8 +684,12 @@ impl WorldState {
             dt: DT,
             mutation_rate_mult: 1.0,
             predation_factor: 1.0,
+            radius_cost_exp: 1.5,
+            agg_mobility: 0.3,
+            starvation_severity: 0.05,
             _pad1: 0,
             _pad2: 0,
+            _pad3: 0,
         };
         queue.write_buffer(&self.sim_params_buffer, 0, bytemuck::bytes_of(&sim_params));
 
@@ -694,8 +706,12 @@ impl WorldState {
             dt: DT * params.time_step,
             mutation_rate_mult: params.mutation_rate,
             predation_factor: params.predation_factor,
+            radius_cost_exp: params.radius_cost_exponent,
+            agg_mobility: params.agg_mobility_tradeoff,
+            starvation_severity: params.starvation_severity,
             _pad1: 0,
             _pad2: 0,
+            _pad3: 0,
         };
         queue.write_buffer(&self.sim_params_buffer, 0, bytemuck::bytes_of(&sim_params));
 
@@ -725,6 +741,90 @@ impl WorldState {
 
         // Reset mass_sum atomic to 0 before each normalization pass
         queue.write_buffer(&self.mass_sum, 0, bytemuck::bytes_of(&[0u32; 2]));
+    }
+
+    /// Apply an ecological perturbation to the simulation buffers (CPU-side readback + writeback).
+    /// This performs a synchronous GPU readback, modifies the data, and writes it back.
+    pub fn apply_perturbation(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        params: &SimulationParams,
+    ) {
+        use crate::config::PerturbationType;
+
+        let snap = match self.readback_snapshot(device, queue) {
+            Some(s) => s,
+            None => return,
+        };
+
+        let w = WORLD_WIDTH as f32;
+        let h = WORLD_HEIGHT as f32;
+        let cx = params.perturbation_center_x * w;
+        let cy = params.perturbation_center_y * h;
+        let radius = params.perturbation_radius * w;
+        let intensity = params.perturbation_intensity;
+
+        let mut resource = snap.resource.clone();
+        let mut mass = snap.mass.clone();
+        let mut energy = snap.energy.clone();
+        let mut genome_b = snap.genome_b.clone();
+
+        let cur = self.cur();
+
+        for py in 0..WORLD_HEIGHT {
+            for px in 0..WORLD_WIDTH {
+                let idx = (py * WORLD_WIDTH + px) as usize;
+                // Toroidal distance
+                let mut dx = px as f32 - cx;
+                let mut dy = py as f32 - cy;
+                if dx > w * 0.5 { dx -= w; }
+                if dx < -w * 0.5 { dx += w; }
+                if dy > h * 0.5 { dy -= h; }
+                if dy < -h * 0.5 { dy += h; }
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist > radius { continue; }
+
+                let falloff = 1.0 - dist / radius;
+
+                match params.perturbation_type {
+                    PerturbationType::Drought => {
+                        // Reduce resources in area
+                        resource[idx] *= 1.0 - intensity * falloff * 0.8;
+                        resource[idx] = resource[idx].max(0.01);
+                    }
+                    PerturbationType::NutrientPulse => {
+                        // Boost resources in area
+                        resource[idx] += intensity * falloff * 0.5;
+                        resource[idx] = resource[idx].min(1.0);
+                    }
+                    PerturbationType::MassStorm => {
+                        // Catastrophe: reduce mass and energy
+                        let kill = intensity * falloff * 0.7;
+                        mass[idx] *= 1.0 - kill;
+                        energy[idx] *= 1.0 - kill * 0.5;
+                    }
+                    PerturbationType::MutationBurst => {
+                        // Amplify mutation rate locally (temporarily via genome_b)
+                        if mass[idx] > 0.01 {
+                            genome_b[idx] = (genome_b[idx] + intensity * falloff * 0.005).min(0.01);
+                        }
+                    }
+                    PerturbationType::None => {}
+                }
+            }
+        }
+
+        // Write back modified buffers
+        queue.write_buffer(&self.resource_map, 0, bytemuck::cast_slice(&resource));
+        queue.write_buffer(&self.mass[cur], 0, bytemuck::cast_slice(&mass));
+        queue.write_buffer(&self.energy[cur], 0, bytemuck::cast_slice(&energy));
+        queue.write_buffer(&self.genome_b[cur], 0, bytemuck::cast_slice(&genome_b));
+
+        log::info!(
+            "Perturbation applied: {:?} at ({:.0},{:.0}) r={:.0} i={:.2}",
+            params.perturbation_type, cx, cy, radius, intensity
+        );
     }
 
     /// Perform a synchronous GPU readback of all simulation buffers.

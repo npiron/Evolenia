@@ -37,21 +37,31 @@ pub struct MetricsRecord {
     pub avg_sigma: f32,
     pub avg_aggressivity: f32,
     pub avg_mutation_rate: f32,
+    // Phase 1 eco metrics
+    pub prey_fraction: f32,
+    pub opportunist_fraction: f32,
+    pub effective_diversity: f32,
+    pub genome_variance: f32,
+    pub total_energy: f32,
+    pub energy_flux: f32,
 }
 
 impl MetricsRecord {
     pub fn csv_header() -> &'static str {
-        "frame,time_ms,fps,total_mass,avg_energy,entropy,species,live_pixels,live_fraction,predator_fraction,avg_resource,mass_std_dev,avg_radius,avg_mu,avg_sigma,avg_aggressivity,avg_mutation_rate"
+        "frame,time_ms,fps,total_mass,avg_energy,entropy,species,live_pixels,live_fraction,predator_fraction,avg_resource,mass_std_dev,avg_radius,avg_mu,avg_sigma,avg_aggressivity,avg_mutation_rate,prey_fraction,opportunist_fraction,effective_diversity,genome_variance,total_energy,energy_flux"
     }
 
     pub fn to_csv_line(&self) -> String {
         format!(
-            "{},{:.1},{:.1},{:.2},{:.4},{:.3},{},{},{:.4},{:.4},{:.4},{:.5},{:.3},{:.4},{:.4},{:.4},{:.6}",
+            "{},{:.1},{:.1},{:.2},{:.4},{:.3},{},{},{:.4},{:.4},{:.4},{:.5},{:.3},{:.4},{:.4},{:.4},{:.6},{:.4},{:.4},{:.3},{:.5},{:.2},{:.5}",
             self.frame, self.time_ms, self.fps, self.total_mass, self.avg_energy,
             self.entropy, self.species, self.live_pixels, self.live_fraction,
             self.predator_fraction, self.avg_resource, self.mass_std_dev,
             self.avg_radius, self.avg_mu, self.avg_sigma,
             self.avg_aggressivity, self.avg_mutation_rate,
+            self.prey_fraction, self.opportunist_fraction,
+            self.effective_diversity, self.genome_variance,
+            self.total_energy, self.energy_flux,
         )
     }
 }
@@ -245,6 +255,12 @@ impl LabState {
             avg_sigma: diag.genome_stats.avg_sigma,
             avg_aggressivity: diag.genome_stats.avg_aggressivity,
             avg_mutation_rate: diag.genome_stats.avg_mutation_rate,
+            prey_fraction: diag.prey_fraction,
+            opportunist_fraction: diag.opportunist_fraction,
+            effective_diversity: diag.effective_diversity,
+            genome_variance: diag.genome_variance,
+            total_energy: diag.total_energy,
+            energy_flux: diag.energy_flux,
         };
         self.metrics_history.push(record);
     }
@@ -464,6 +480,13 @@ impl LabState {
                 avg_sigma: fields[14].parse().unwrap_or(0.0),
                 avg_aggressivity: fields[15].parse().unwrap_or(0.0),
                 avg_mutation_rate: fields[16].parse().unwrap_or(0.0),
+                // Phase 1 eco metrics (default 0 for backward compat with old CSVs)
+                prey_fraction: fields.get(17).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                opportunist_fraction: fields.get(18).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                effective_diversity: fields.get(19).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                genome_variance: fields.get(20).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                total_energy: fields.get(21).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                energy_flux: fields.get(22).and_then(|s| s.parse().ok()).unwrap_or(0.0),
             };
             records.push(record);
         }

@@ -17,8 +17,12 @@ struct Params {
     dt: f32,
     mutation_rate_mult: f32,
     predation_factor: f32,
+    radius_cost_exp: f32,      // exponent for radius metabolic cost
+    agg_mobility: f32,         // aggressivity-mobility tradeoff strength
+    starvation_severity: f32,  // mass decay multiplier when starving
     _pad1: u32,
     _pad2: u32,
+    _pad3: u32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -189,22 +193,23 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // ================== METABOLISM ==================
     // Cost scales with genomic complexity (Darwinian parsimony)
-    // Aggressivity has an additional metabolic penalty (predators need more energy)
+    // Non-linear radius cost: pow(r/9, exponent) — quadratic penalizes large perception
     let genomic_complexity = length(vec3<f32>(mu, sigma, agg));
-    let radius_penalty = (r / 9.0) * 0.02;
+    let radius_penalty = pow(r / 9.0, params.radius_cost_exp) * 0.03;
     let agg_penalty = agg * agg * 0.04 * params.predation_factor;
     let predator_interference = agg * agg * agg * 0.02 * params.predation_factor;
     let cost = (genomic_complexity * 0.02 + radius_penalty + agg_penalty + predator_interference) * m;
     // Absorption from local resource map (nutrient uptake)
     // Break-even at ~30% resource depletion → meaningful survival pressure
+    // Aggressivity-mobility tradeoff: predators see less (reduced effective radius in kernel)
     let prey_bonus = (1.0 - agg) * 0.010;
     let absorption = resource_map[i] * m * (0.032 + prey_bonus);
     var energy_new = clamp(e + absorption - cost, 0.0, 1.0);
 
     // Starvation: significant mass decay when energy depleted
     if (energy_new <= 0.05) {
-        let starvation_severity = 1.0 - energy_new / 0.05; // 0 at e=0.05, 1 at e=0
-        mass_candidate *= 1.0 - 0.05 * starvation_severity; // up to 5% mass loss per step
+        let starvation_k = 1.0 - energy_new / 0.05; // 0 at e=0.05, 1 at e=0
+        mass_candidate *= 1.0 - params.starvation_severity * starvation_k;
     }
 
     // ================== MASS-CONSERVATIVE ADVECTION ==================

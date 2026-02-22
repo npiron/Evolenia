@@ -6,7 +6,7 @@
 
 use egui_plot::{Line, Plot, PlotPoints};
 
-use crate::config::{visualization_mode_name, SimulationParams, VIS_MODE_COUNT};
+use crate::config::{visualization_mode_name, PerturbationType, SimulationParams, VIS_MODE_COUNT};
 use crate::lab::LabState;
 use crate::world::{target_total_mass, WORLD_HEIGHT, WORLD_WIDTH};
 
@@ -80,6 +80,8 @@ fn render_left_panel(
                 render_control_section(ui, params, lab);
                 ui.separator();
                 render_params_section(ui, params, lab);
+                ui.separator();
+                render_perturbation_section(ui, params, lab);
                 ui.separator();
                 render_visualization_section(ui, params);
                 ui.separator();
@@ -239,6 +241,43 @@ fn render_params_section(
         });
 
         ui.group(|ui| {
+            ui.label(egui::RichText::new("⚖ Non-Linear Trade-offs").strong());
+            if ui.add(
+                egui::Slider::new(&mut params.radius_cost_exponent, 1.0..=3.0)
+                    .text("Radius Cost Exp")
+                    .step_by(0.1),
+            ).changed() {
+                lab.log_event(0, "PARAM_CHANGE", &format!("radius_cost_exp={:.1}", params.radius_cost_exponent));
+            }
+            ui.label(
+                egui::RichText::new("Higher = larger radii penalized more")
+                    .small()
+                    .color(egui::Color32::GRAY),
+            );
+
+            if ui.add(
+                egui::Slider::new(&mut params.agg_mobility_tradeoff, 0.0..=1.0)
+                    .text("Agg↔Mobility")
+                    .step_by(0.05),
+            ).changed() {
+                lab.log_event(0, "PARAM_CHANGE", &format!("agg_mobility={:.2}", params.agg_mobility_tradeoff));
+            }
+            ui.label(
+                egui::RichText::new("Aggressive organisms move slower")
+                    .small()
+                    .color(egui::Color32::GRAY),
+            );
+
+            if ui.add(
+                egui::Slider::new(&mut params.starvation_severity, 0.01..=0.2)
+                    .text("Starvation")
+                    .step_by(0.005),
+            ).changed() {
+                lab.log_event(0, "PARAM_CHANGE", &format!("starvation={:.3}", params.starvation_severity));
+            }
+        });
+
+        ui.group(|ui| {
             ui.label(egui::RichText::new("Initial Conditions (on restart)").strong());
             ui.add(
                 egui::Slider::new(&mut params.num_seed_clusters, 5..=100)
@@ -255,6 +294,99 @@ fn render_params_section(
                     .step_by(0.01),
             );
         });
+    });
+}
+
+// ======================== Perturbation Section ========================
+
+fn render_perturbation_section(
+    ui: &mut egui::Ui,
+    params: &mut SimulationParams,
+    lab: &mut LabState,
+) {
+    ui.collapsing("🌊 Perturbations", |ui| {
+        ui.label(
+            egui::RichText::new("Apply ecological disturbances")
+                .small()
+                .color(egui::Color32::GRAY),
+        );
+
+        // Perturbation type selector
+        egui::ComboBox::from_label("Type")
+            .selected_text(params.perturbation_type.name())
+            .show_ui(ui, |ui| {
+                for pt in PerturbationType::all() {
+                    ui.selectable_value(&mut params.perturbation_type, pt.clone(), pt.name());
+                }
+            });
+
+        // Intensity
+        ui.add(
+            egui::Slider::new(&mut params.perturbation_intensity, 0.0..=1.0)
+                .text("Intensity")
+                .step_by(0.05),
+        );
+
+        // Radius
+        ui.add(
+            egui::Slider::new(&mut params.perturbation_radius, 0.05..=0.5)
+                .text("Radius")
+                .step_by(0.01),
+        );
+
+        // Center
+        ui.horizontal(|ui| {
+            ui.label("Center:");
+            ui.add(egui::DragValue::new(&mut params.perturbation_center_x)
+                .range(0.0..=1.0).speed(0.01).prefix("x="));
+            ui.add(egui::DragValue::new(&mut params.perturbation_center_y)
+                .range(0.0..=1.0).speed(0.01).prefix("y="));
+        });
+
+        ui.add_space(4.0);
+
+        // Description of current perturbation
+        let desc = match params.perturbation_type {
+            PerturbationType::None => "No perturbation selected",
+            PerturbationType::Drought => "Destroys resources in affected area",
+            PerturbationType::NutrientPulse => "Injects extra resources",
+            PerturbationType::MassStorm => "Kills organisms (mass → 0)",
+            PerturbationType::MutationBurst => "Randomizes DNA in affected area",
+        };
+        ui.label(
+            egui::RichText::new(desc)
+                .small()
+                .italics()
+                .color(egui::Color32::from_rgb(200, 200, 150)),
+        );
+
+        ui.add_space(4.0);
+
+        let can_apply = params.perturbation_type != PerturbationType::None;
+        ui.add_enabled_ui(can_apply, |ui| {
+            if ui.button("⚡ Apply Perturbation").clicked() {
+                params.perturbation_active = true;
+                lab.log_event(
+                    0,
+                    "PERTURBATION",
+                    &format!(
+                        "{} intensity={:.2} radius={:.2} center=({:.2},{:.2})",
+                        params.perturbation_type.name(),
+                        params.perturbation_intensity,
+                        params.perturbation_radius,
+                        params.perturbation_center_x,
+                        params.perturbation_center_y,
+                    ),
+                );
+            }
+        });
+
+        if params.perturbation_active {
+            ui.label(
+                egui::RichText::new("● Pending…")
+                    .color(egui::Color32::from_rgb(255, 200, 50)),
+            );
+        }
     });
 }
 
@@ -431,6 +563,13 @@ fn render_right_analysis_panel(ctx: &egui::Context, lab: &mut LabState) {
                         stat_row(ui, "Predators", &format!("{:.1}%", last.predator_fraction * 100.0));
                         stat_row(ui, "Avg Resource", &format!("{:.3}", last.avg_resource));
                         stat_row(ui, "Mass StdDev", &format!("{:.4}", last.mass_std_dev));
+                        // Phase 1 eco metrics
+                        stat_row(ui, "Prey %", &format!("{:.1}%", last.prey_fraction * 100.0));
+                        stat_row(ui, "Opportunist %", &format!("{:.1}%", last.opportunist_fraction * 100.0));
+                        stat_row(ui, "Eff. Diversity", &format!("{:.2}", last.effective_diversity));
+                        stat_row(ui, "Genome Var", &format!("{:.4}", last.genome_variance));
+                        stat_row(ui, "Total Energy", &format!("{:.0}", last.total_energy));
+                        stat_row(ui, "Energy Flux", &format!("{:.4}", last.energy_flux));
                     });
             }
             ui.separator();
@@ -443,6 +582,11 @@ fn render_right_analysis_panel(ctx: &egui::Context, lab: &mut LabState) {
                 render_plot(ui, "Species Count", &lab.metrics_history, |m| m.species as f64);
                 render_plot(ui, "Live Pixels", &lab.metrics_history, |m| m.live_pixels as f64);
                 render_plot(ui, "FPS", &lab.metrics_history, |m| m.fps as f64);
+
+                // Phase 1 eco plots
+                render_plot(ui, "Effective Diversity", &lab.metrics_history, |m| m.effective_diversity as f64);
+                render_plot(ui, "Energy Flux", &lab.metrics_history, |m| m.energy_flux as f64);
+                render_plot(ui, "Genome Variance", &lab.metrics_history, |m| m.genome_variance as f64);
 
                 // Comparison section
                 if !lab.completed_runs.is_empty() {

@@ -36,6 +36,20 @@ pub struct SimDiagnostics {
 
     // Spatial
     pub mass_std_dev: f32, // spatial uniformity of mass
+
+    // --- Phase 1 eco metrics ---
+    // Trophic balance
+    pub prey_fraction: f32,        // fraction with agg < 0.2
+    pub opportunist_fraction: f32, // fraction with 0.2 <= agg < 0.5
+    pub predator_fraction_strict: f32, // fraction with agg >= 0.5
+
+    // Diversity dynamics
+    pub effective_diversity: f32,  // Hill number N1 = exp(H) — effective species count
+    pub genome_variance: f32,      // variance of genome trait space
+
+    // Energy flow
+    pub total_energy: f32,
+    pub energy_flux: f32,          // mass-weighted energy change capacity
 }
 
 impl SimDiagnostics {
@@ -96,6 +110,61 @@ impl SimDiagnostics {
         let species_count = detect_species(&snap.genome_a, &snap.mass, 20);
         let genome_stats = compute_genome_stats(&snap.genome_a, &snap.genome_b, &snap.mass);
 
+        // ---- Trophic classification ----
+        let mut prey_mass = 0.0f64;
+        let mut opp_mass = 0.0f64;
+        let mut pred_mass = 0.0f64;
+        let mut total_energy_sum = 0.0f64;
+        let mut genome_trait_var = 0.0f64;
+        let num_pixels = snap.genome_a.len() / 4;
+        for i in 0..num_pixels {
+            let m = snap.mass[i];
+            if m < 0.01 { continue; }
+            let agg = snap.genome_a[i * 4 + 3];
+            if agg < 0.2 {
+                prey_mass += m as f64;
+            } else if agg < 0.5 {
+                opp_mass += m as f64;
+            } else {
+                pred_mass += m as f64;
+            }
+            total_energy_sum += snap.energy[i] as f64;
+        }
+        let total_live_mass = (prey_mass + opp_mass + pred_mass).max(1e-6);
+        let prey_fraction = (prey_mass / total_live_mass) as f32;
+        let opportunist_fraction = (opp_mass / total_live_mass) as f32;
+        let predator_fraction_strict = (pred_mass / total_live_mass) as f32;
+
+        // Effective diversity (Hill number N1 = exp(H))
+        let effective_diversity = if genetic_entropy > 0.0 {
+            (genetic_entropy * std::f32::consts::LN_2).exp()
+        } else {
+            1.0
+        };
+
+        // Genome variance (average trait-space distance from centroid)
+        if live_pixels > 0 {
+            let mean_r = genome_stats.avg_radius;
+            let mean_mu = genome_stats.avg_mu;
+            let mean_sigma = genome_stats.avg_sigma;
+            let mean_agg = genome_stats.avg_aggressivity;
+            let mut var_sum = 0.0f64;
+            let mut var_count = 0u32;
+            for i in 0..num_pixels {
+                if snap.mass[i] < 0.01 { continue; }
+                let dr = (snap.genome_a[i * 4] / 16.0 - mean_r / 16.0) as f64;
+                let dm = (snap.genome_a[i * 4 + 1] - mean_mu) as f64;
+                let ds = (snap.genome_a[i * 4 + 2] / 0.3 - mean_sigma / 0.3) as f64;
+                let da = (snap.genome_a[i * 4 + 3] - mean_agg) as f64;
+                var_sum += dr * dr + dm * dm + ds * ds + da * da;
+                var_count += 1;
+            }
+            genome_trait_var = if var_count > 0 { var_sum / var_count as f64 } else { 0.0 };
+        }
+
+        // Energy flux proxy: resources available × mass consumption capacity
+        let energy_flux = (avg_resource * avg_mass_live).max(0.0);
+
         SimDiagnostics {
             total_mass: total_mass as f32,
             live_pixels,
@@ -112,6 +181,13 @@ impl SimDiagnostics {
             species_count,
             genome_stats,
             mass_std_dev,
+            prey_fraction,
+            opportunist_fraction,
+            predator_fraction_strict,
+            effective_diversity,
+            genome_variance: genome_trait_var as f32,
+            total_energy: total_energy_sum as f32,
+            energy_flux,
         }
     }
 
@@ -173,6 +249,18 @@ impl SimDiagnostics {
         log::info!(
             "SPATIAL: mass_stddev={:.4}",
             self.mass_std_dev,
+        );
+        log::info!(
+            "TROPHIC: prey={:.1}% | opportunist={:.1}% | predator={:.1}%",
+            self.prey_fraction * 100.0,
+            self.opportunist_fraction * 100.0,
+            self.predator_fraction_strict * 100.0,
+        );
+        log::info!(
+            "DIVERSITY: effective_N1={:.2} | genome_variance={:.4} | energy_flux={:.4}",
+            self.effective_diversity,
+            self.genome_variance,
+            self.energy_flux,
         );
     }
 }

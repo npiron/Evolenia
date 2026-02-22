@@ -8,6 +8,9 @@
 //   2 = Mass Density: Grayscale intensity
 //   3 = Genetic Diversity: Color variation by local genome variance
 //   4 = Predator/Prey: Red = high aggressivity, Green = passive
+//   5 = Metabolic Stress: Shows energy deficit — cyan=healthy, magenta=starving
+//   6 = Advection Flux: Velocity field magnitude — blue=still, yellow=fast
+//   7 = Trophic Roles: Prey(green) / Opportunist(blue) / Predator(red)
 // ============================================================================
 
 struct VertexOutput {
@@ -57,6 +60,8 @@ struct CameraUniforms {
 @group(0) @binding(2) var<storage, read> energy: array<f32>;
 @group(0) @binding(3) var<storage, read> genome_a: array<vec4<f32>>;
 @group(0) @binding(4) var<uniform> camera: CameraUniforms;
+@group(0) @binding(5) var<storage, read> velocity: array<vec2<f32>>;
+@group(0) @binding(6) var<storage, read> resource_map: array<f32>;
 
 // HSV to RGB conversion for diversity visualization
 fn hsv2rgb(h: f32, s: f32, v: f32) -> vec3<f32> {
@@ -148,6 +153,65 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let species_color = mix(prey_color, predator_color, ga.w);
         let color = mix(bg, species_color, m);
         return vec4<f32>(color, 1.0);
+    }
+
+    // Mode 5: Metabolic Stress — energy deficit visualization
+    // Cyan = healthy (high energy), Magenta = starving, overlaid on resource landscape
+    if render_params.visualization_mode == 5u {
+        let r_val = resource_map[idx];
+        let resource_bg = vec3<f32>(0.02, 0.08 * r_val, 0.02); // dim green for resource base
+        if (m > 0.01) {
+            let stress = 1.0 - clamp(e / 0.3, 0.0, 1.0); // 0=healthy, 1=starving
+            let healthy_col = vec3<f32>(0.0, 0.9, 0.9);   // cyan
+            let starving_col = vec3<f32>(0.9, 0.0, 0.7);  // magenta
+            let stress_col = mix(healthy_col, starving_col, stress);
+            let color = mix(resource_bg, stress_col, m);
+            return vec4<f32>(color, 1.0);
+        }
+        return vec4<f32>(resource_bg, 1.0);
+    }
+
+    // Mode 6: Advection Flux — velocity field magnitude
+    // Blue = stationary, Yellow = high flux, with directional tint
+    if render_params.visualization_mode == 6u {
+        let vel = velocity[idx];
+        let speed = length(vel);
+        let norm_speed = clamp(speed * 20.0, 0.0, 1.0); // scale for visibility
+        // Direction-dependent color: hue from atan2
+        let angle = atan2(vel.y, vel.x); // -π to π
+        let hue = (angle / 6.2832 + 0.5); // 0 to 1
+        let flux_col = hsv2rgb(hue, 0.8, norm_speed);
+        let still_col = vec3<f32>(0.05, 0.05, 0.15);
+        let color = mix(still_col, flux_col, clamp(norm_speed + m * 0.3, 0.0, 1.0));
+        return vec4<f32>(color, 1.0);
+    }
+
+    // Mode 7: Trophic Roles — multi-level trophic classification
+    // Green = passive prey (agg<0.2), Blue = opportunist (0.2-0.5), Red = predator (>0.5)
+    // Brightness = mass, saturation = specialization (low sigma = specialist)
+    if render_params.visualization_mode == 7u {
+        if (m > 0.01) {
+            let agg_v = ga.w;
+            let specialization = clamp(1.0 - ga.z / 0.2, 0.0, 1.0);
+            var role_col: vec3<f32>;
+            if (agg_v < 0.2) {
+                // Prey: green → lime, specialist prey are more saturated
+                role_col = vec3<f32>(0.1, 0.85, 0.15);
+            } else if (agg_v < 0.5) {
+                // Opportunist: blue-teal, interpolated
+                let t = (agg_v - 0.2) / 0.3;
+                role_col = mix(vec3<f32>(0.1, 0.7, 0.6), vec3<f32>(0.3, 0.3, 0.9), t);
+            } else {
+                // Predator: orange → red
+                let t = (agg_v - 0.5) / 0.5;
+                role_col = mix(vec3<f32>(1.0, 0.5, 0.0), vec3<f32>(1.0, 0.0, 0.0), t);
+            }
+            let sat = mix(0.5, 1.0, specialization);
+            let final_col = mix(vec3<f32>(0.5), role_col, sat);
+            let color = mix(bg, final_col, m);
+            return vec4<f32>(color, 1.0);
+        }
+        return vec4<f32>(bg, 1.0);
     }
 
     // Fallback (should never reach)

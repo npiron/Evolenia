@@ -1,0 +1,4 @@
+frame,time_ms,fps,total_mass,avg_energy,entropy,species,live_pixels,live_fraction,predator_fraction,avg_resource,mass_std_dev,avg_radius,avg_mu,avg_sigma,avg_aggressivity,avg_mutation_rate,prey_fraction,opportunist_fraction,effective_diversity,genome_variance,total_energy,energy_flux
+5000,958.6,27.6,51449.21,0.0110,6.863,20,66403,0.2533,0.6604,1.0000,0.36378,5.147,0.2237,0.1378,0.7596,0.005534,0.0026,0.0844,116.375,0.08368,730.61,0.77480
+5500,2788.1,28.4,47825.53,0.0115,6.870,20,61382,0.2342,0.6701,1.0000,0.35487,5.122,0.2169,0.1372,0.7635,0.005540,0.0026,0.0803,116.996,0.08267,706.45,0.77915
+6000,4615.2,27.7,44210.11,0.0129,6.840,20,56275,0.2147,0.6711,1.0000,0.34499,5.078,0.2082,0.1364,0.7635,0.005473,0.0028,0.0808,114.543,0.08266,727.51,0.78561

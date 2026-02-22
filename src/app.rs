@@ -14,7 +14,7 @@ use winit::{
 };
 
 use crate::camera::CameraState;
-use crate::config::SimulationParams;
+use crate::config::{SimulationParams, VIS_MODE_COUNT};
 use crate::input::KeysHeld;
 use crate::lab::LabState;
 use crate::lab_ui;
@@ -403,7 +403,7 @@ fn handle_keyboard(
         Key::Named(named) => match named {
             NamedKey::Tab if pressed => {
                 state.sim_params.visualization_mode =
-                    (state.sim_params.visualization_mode + 1) % 5;
+                    (state.sim_params.visualization_mode + 1) % VIS_MODE_COUNT;
             }
             NamedKey::ArrowUp if pressed => {
                 state.sim_params.time_step =
@@ -488,6 +488,26 @@ fn redraw(state: &mut AppState) {
             state.lab.log_event(state.world.frame, "SEED", &format!("Seed: {}", s));
         }
         log::info!("Simulation restarted (seed: {:?})", seed);
+    }
+
+    // ---- Handle perturbation ----
+    if state.sim_params.perturbation_active {
+        state.world.apply_perturbation(
+            &state.device,
+            &state.queue,
+            &state.sim_params,
+        );
+        state.sim_params.perturbation_active = false;
+        log::info!(
+            "Perturbation applied: {} intensity={:.2} radius={:.2}",
+            state.sim_params.perturbation_type.name(),
+            state.sim_params.perturbation_intensity,
+            state.sim_params.perturbation_radius,
+        );
+        state.lab.set_status(format!(
+            "Perturbation '{}' applied",
+            state.sim_params.perturbation_type.name(),
+        ));
     }
 
     // Update diag interval from lab UI

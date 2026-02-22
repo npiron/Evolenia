@@ -36,6 +36,19 @@ pub struct SimulationParams {
     pub mass_damping: f32,
     pub target_mass_multiplier: f32,
 
+    // -- Non-linear trade-offs --
+    pub radius_cost_exponent: f32,   // exponent for radius metabolic cost (1.0=linear, 2.0=quadratic)
+    pub agg_mobility_tradeoff: f32,  // high agg reduces effective perception (0=disabled, 1=max)
+    pub starvation_severity: f32,    // mass decay rate when energy depleted
+
+    // -- Perturbations --
+    pub perturbation_type: PerturbationType,
+    pub perturbation_intensity: f32,   // 0.0–1.0 amplitude
+    pub perturbation_radius: f32,      // spatial extent (fraction of world, 0.05–0.5)
+    pub perturbation_active: bool,     // fire once (auto-clears)
+    pub perturbation_center_x: f32,    // center in world-space [0,1]
+    pub perturbation_center_y: f32,
+
     // -- Initial conditions (applied on restart) --
     pub num_seed_clusters: u32,
     pub seed_cluster_size: f32,
@@ -69,6 +82,17 @@ impl Default for SimulationParams {
             mass_damping: 0.3,
             target_mass_multiplier: 1.0,
 
+            radius_cost_exponent: 1.5,
+            agg_mobility_tradeoff: 0.3,
+            starvation_severity: 0.05,
+
+            perturbation_type: PerturbationType::None,
+            perturbation_intensity: 0.5,
+            perturbation_radius: 0.15,
+            perturbation_active: false,
+            perturbation_center_x: 0.5,
+            perturbation_center_y: 0.5,
+
             num_seed_clusters: 30,
             seed_cluster_size: 1.0,
             initial_mass_fill: 0.15,
@@ -91,6 +115,38 @@ impl SimulationParams {
     }
 }
 
+/// Perturbation types for ecological experiments.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum PerturbationType {
+    None,
+    Drought,         // reduces resources in area
+    NutrientPulse,   // boosts resources in area
+    MassStorm,       // randomizes mass/energy in area (catastrophe)
+    MutationBurst,   // locally amplifies mutation rate
+}
+
+impl PerturbationType {
+    pub fn all() -> &'static [PerturbationType] {
+        &[
+            PerturbationType::None,
+            PerturbationType::Drought,
+            PerturbationType::NutrientPulse,
+            PerturbationType::MassStorm,
+            PerturbationType::MutationBurst,
+        ]
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            PerturbationType::None => "None",
+            PerturbationType::Drought => "Drought",
+            PerturbationType::NutrientPulse => "Nutrient Pulse",
+            PerturbationType::MassStorm => "Mass Storm",
+            PerturbationType::MutationBurst => "Mutation Burst",
+        }
+    }
+}
+
 /// Returns the display name for a given visualization mode index.
 pub fn visualization_mode_name(mode: u32) -> &'static str {
     match mode {
@@ -99,9 +155,12 @@ pub fn visualization_mode_name(mode: u32) -> &'static str {
         2 => "Mass Density",
         3 => "Genetic Diversity",
         4 => "Predator/Prey",
+        5 => "Metabolic Stress",
+        6 => "Advection Flux",
+        7 => "Trophic Roles",
         _ => "Unknown",
     }
 }
 
 /// Total number of visualization modes available.
-pub const VIS_MODE_COUNT: u32 = 5;
+pub const VIS_MODE_COUNT: u32 = 8;

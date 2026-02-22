@@ -250,6 +250,8 @@ pub fn create_pipelines(
             bgl_storage_ro(2),
             bgl_storage_ro(3),
             bgl_uniform(4),
+            bgl_storage_ro(5),
+            bgl_storage_ro(6),
         ],
     });
 
@@ -306,6 +308,8 @@ pub fn create_pipelines(
                 bg_buffer(2, &world.energy[1]),
                 bg_buffer(3, &world.genome_a[1]),
                 bg_buffer(4, &camera_buffer),
+                bg_buffer(5, &world.velocity),
+                bg_buffer(6, &world.resource_map),
             ],
         }),
         device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -317,6 +321,8 @@ pub fn create_pipelines(
                 bg_buffer(2, &world.energy[0]),
                 bg_buffer(3, &world.genome_a[0]),
                 bg_buffer(4, &camera_buffer),
+                bg_buffer(5, &world.velocity),
+                bg_buffer(6, &world.resource_map),
             ],
         }),
     ];
