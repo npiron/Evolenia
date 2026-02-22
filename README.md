@@ -227,23 +227,23 @@ Or shader constants in [src/shaders/compute_evolution.wgsl](src/shaders/compute_
 
 ## 🧭 Project Review (BMAD)
 
-Cette revue suit la méthode **BMAD** (Business, Model, Architecture, Delivery) pour offrir un regard équilibré sur la valeur, la rigueur scientifique, la structure technique et la capacité de livraison.
+This review follows the **BMAD** method (Business, Model, Architecture, Delivery) to provide a balanced view of value, scientific rigor, technical structure, and delivery readiness.
 
 ### Business
-- **Valeur** : simulateur de vie artificielle open-source, orienté recherche, avec visualisation temps réel.
-- **Public cible** : chercheurs, enseignants et passionnés d’ALife; licence MIT facilite l’adoption.
+- **Value**: open-source artificial life simulator focused on research, with real-time visualization.
+- **Target audience**: researchers, educators, and ALife enthusiasts; the MIT license eases adoption.
 
 ### Model
-- **Rigueur** : Lenia + Gray-Scott + conservation de masse; évolution endogène crédible.
-- **Axes d’amélioration** : réglages en temps réel (UI), configuration externe, tests de reproductibilité.
+- **Rigor**: Lenia + Gray-Scott + mass conservation; credible endogenous evolution.
+- **Areas for improvement**: real-time tuning (UI), external configuration, reproducibility tests.
 
 ### Architecture
-- **Forces** : Rust + WGPU, pipeline GPU clair, shaders isolés, mode headless + snapshots.
-- **Faiblesses** : constantes encore codées en dur; intégration UI/egui à finaliser.
+- **Strengths**: Rust + WGPU, clear GPU pipeline, isolated shaders, headless mode + snapshots.
+- **Weaknesses**: constants still hardcoded; UI/egui integration to finalize.
 
 ### Delivery
-- **Forces** : documentation complète, script `run.sh`, changelog structuré.
-- **À renforcer** : CI automatisée (fmt/clippy/tests) et couverture de tests.
+- **Strengths**: comprehensive documentation, `run.sh` workflow, structured changelog.
+- **To strengthen**: automated CI (fmt/clippy/tests) and test coverage.
 
 ---
 
