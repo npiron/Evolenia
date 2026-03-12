@@ -135,11 +135,50 @@ impl ApplicationHandler for App {
 
         // ---- Initialize egui ----
         let egui_ctx = egui::Context::default();
-        // Dark theme with slightly transparent backgrounds for overlay feel
+        
+        // Enhanced dark theme - OPAQUE backgrounds with vibrant accents
         let mut visuals = egui::Visuals::dark();
-        visuals.window_fill = egui::Color32::from_rgba_premultiplied(27, 27, 35, 235);
-        visuals.panel_fill = egui::Color32::from_rgba_premultiplied(20, 20, 28, 230);
+        // Fully opaque panel backgrounds
+        visuals.window_fill = egui::Color32::from_rgb(22, 24, 32);
+        visuals.panel_fill = egui::Color32::from_rgb(18, 20, 28);
+        visuals.extreme_bg_color = egui::Color32::from_rgb(12, 14, 20);
+        visuals.faint_bg_color = egui::Color32::from_rgb(28, 32, 42);
+        // Vibrant accent colors
+        visuals.window_stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(70, 130, 180));
+        visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(32, 36, 48);
+        visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(160, 170, 190));
+        visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(45, 50, 65);
+        visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(180, 190, 210));
+        visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(60, 90, 130);
+        visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(220, 230, 255));
+        visuals.widgets.active.bg_fill = egui::Color32::from_rgb(80, 140, 200);
+        visuals.widgets.active.fg_stroke = egui::Stroke::new(2.0, egui::Color32::WHITE);
+        visuals.selection.bg_fill = egui::Color32::from_rgb(50, 120, 180);
+        visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(100, 180, 255));
+        visuals.hyperlink_color = egui::Color32::from_rgb(100, 200, 255);
         egui_ctx.set_visuals(visuals);
+        
+        // Larger default font size for better readability
+        let mut style = (*egui_ctx.style()).clone();
+        style.text_styles.insert(
+            egui::TextStyle::Body,
+            egui::FontId::new(15.0, egui::FontFamily::Proportional),
+        );
+        style.text_styles.insert(
+            egui::TextStyle::Button,
+            egui::FontId::new(15.0, egui::FontFamily::Proportional),
+        );
+        style.text_styles.insert(
+            egui::TextStyle::Heading,
+            egui::FontId::new(20.0, egui::FontFamily::Proportional),
+        );
+        style.text_styles.insert(
+            egui::TextStyle::Monospace,
+            egui::FontId::new(14.0, egui::FontFamily::Monospace),
+        );
+        style.spacing.item_spacing = egui::vec2(8.0, 6.0);
+        style.spacing.button_padding = egui::vec2(10.0, 6.0);
+        egui_ctx.set_style(style);
 
         let egui_winit_state = egui_winit::State::new(
             egui_ctx.clone(),
@@ -431,6 +470,10 @@ fn handle_keyboard(
 // ======================== Frame Rendering ========================
 
 fn redraw(state: &mut AppState) {
+    // Get window dimensions early (needed for camera aspect ratio)
+    let win_w = state.surface_config.width;
+    let win_h = state.surface_config.height;
+
     // FPS (exponential moving average)
     let now = Instant::now();
     let dt = now.duration_since(state.last_redraw).as_secs_f32().max(0.0001);
@@ -445,11 +488,11 @@ fn redraw(state: &mut AppState) {
         .camera
         .apply_zoom_keys(state.keys.e, state.keys.q);
 
-    // Upload camera uniform
+    // Upload camera uniform with window dimensions for aspect ratio correction
     state.queue.write_buffer(
         &state.pipelines.camera_buffer,
         0,
-        bytemuck::bytes_of(&state.camera.uniforms()),
+        bytemuck::bytes_of(&state.camera.uniforms(win_w, win_h)),
     );
 
     // Upload render params with current visualization mode
@@ -514,8 +557,6 @@ fn redraw(state: &mut AppState) {
     state.diag_interval = state.lab.metrics_sample_interval.max(1);
 
     // ---- Prepare HUD (only when Lab UI hidden, to avoid overlap) ----
-    let win_w = state.surface_config.width;
-    let win_h = state.surface_config.height;
     if !state.lab.show_lab_ui {
         state.hud.prepare(
             &state.device,

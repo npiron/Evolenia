@@ -71,20 +71,20 @@ impl Default for SimulationParams {
             visualization_mode: 0,
             show_extended_ui: false,
 
-            mutation_rate: 1.0,
+            mutation_rate: 0.5,
             predation_factor: 1.0,
 
             resource_diffusion: 0.08,
-            resource_feed_rate: 0.010,
-            resource_consumption: 0.08,
+            resource_feed_rate: 0.012,
+            resource_consumption: 0.06,
 
             mass_normalization_enabled: true,
             mass_damping: 0.3,
             target_mass_multiplier: 1.0,
 
-            radius_cost_exponent: 1.5,
+            radius_cost_exponent: 1.3,
             agg_mobility_tradeoff: 0.3,
-            starvation_severity: 0.05,
+            starvation_severity: 0.03,
 
             perturbation_type: PerturbationType::None,
             perturbation_intensity: 0.5,

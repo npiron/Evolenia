@@ -160,9 +160,9 @@ impl WorldState {
         let mut energy_data = vec![0.5f32; n]; // uniform initial energy
         // CRITICAL: default genome must have valid values even for empty pixels.
         // sigma=0 causes division by zero in the growth function (exp(-x²/2σ²)).
-        // Using safe defaults: r=5, mu=0.5, sigma=0.15, agg=0
-        let mut genome_a_data = vec![[5.0f32, 0.5, 0.15, 0.0]; n]; // [r, mu, sigma, agg]
-        let mut genome_b_data = vec![0.01f32; n]; // default mutation rate
+        // Using safe defaults tuned for Lenia: r=10, mu=0.15, sigma=0.017, agg=0
+        let mut genome_a_data = vec![[10.0f32, 0.15, 0.017, 0.0]; n]; // [r, mu, sigma, agg]
+        let mut genome_b_data = vec![0.003f32; n]; // default mutation rate
         let mut resource_data = vec![1.0f32; n]; // full nutrients everywhere
 
         // ======================== Seed Patterns ========================
@@ -200,21 +200,27 @@ impl WorldState {
         };
 
         // --- Random genome generator ---
+        // Ranges tightened to the Lenia "sweet spot" where stable creatures emerge:
+        // - Radius 7-14 (Lenia creatures need R~10-15)
+        // - Mu 0.10-0.22 (low perceived-density optimum — organisms thrive in sparse neighborhoods)
+        // - Sigma 0.010-0.045 (very narrow growth tolerance — sharp niche = structured patterns)
+        // - Agg 0-0.4 (moderate predation possible but not dominant)
         let random_genome = |rng: &mut rand::rngs::StdRng| -> ([f32; 4], f32) {
-            let gene_r: f32 = rng.gen_range(3.0..9.0);
-            let gene_mu: f32 = rng.gen_range(0.12..0.30);
-            let gene_sigma: f32 = rng.gen_range(0.04..0.18);
-            let gene_agg: f32 = rng.gen_range(0.0..0.6);
-            let gene_mut: f32 = rng.gen_range(0.0005..0.008);
+            let gene_r: f32 = rng.gen_range(7.0..14.0);
+            let gene_mu: f32 = rng.gen_range(0.10..0.22);
+            let gene_sigma: f32 = rng.gen_range(0.010..0.045);
+            let gene_agg: f32 = rng.gen_range(0.0..0.4);
+            let gene_mut: f32 = rng.gen_range(0.0003..0.004);
             ([gene_r, gene_mu, gene_sigma, gene_agg], gene_mut)
         };
 
         // ---- PATTERN 1: Gaussian clusters (classic) ----
-        let num_clusters = 30;
+        // Larger clusters with Lenia-appropriate radii
+        let num_clusters = 20;
         for _ in 0..num_clusters {
             let cx = rng.gen_range(0..w);
             let cy = rng.gen_range(0..h);
-            let radius = rng.gen_range(5..15) as f32;
+            let radius = rng.gen_range(8..18) as f32;
             let (genome, mut_rate) = random_genome(&mut rng);
 
             let ir = radius as i32 + 1;
@@ -230,12 +236,12 @@ impl WorldState {
             }
         }
 
-        // ---- PATTERN 2: Rings / annuli ----
+        // ---- PATTERN 2: Rings / annuli (Lenia-scale) ----
         let num_rings = 8;
         for _ in 0..num_rings {
             let cx = rng.gen_range(0..w);
             let cy = rng.gen_range(0..h);
-            let outer_r = rng.gen_range(10..25) as f32;
+            let outer_r = rng.gen_range(12..26) as f32;
             let inner_r = outer_r * rng.gen_range(0.4..0.7);
             let thickness = (outer_r - inner_r).max(2.0);
             let (genome, mut_rate) = random_genome(&mut rng);
@@ -356,12 +362,12 @@ impl WorldState {
         for _ in 0..num_predators {
             let cx = rng.gen_range(0..w);
             let cy = rng.gen_range(0..h);
-            let radius = rng.gen_range(3..7) as f32;
-            let gene_r: f32 = rng.gen_range(4.0..7.0);
-            let gene_mu: f32 = rng.gen_range(0.15..0.25);
-            let gene_sigma: f32 = rng.gen_range(0.06..0.12);
+            let radius = rng.gen_range(4..9) as f32;
+            let gene_r: f32 = rng.gen_range(7.0..12.0);
+            let gene_mu: f32 = rng.gen_range(0.12..0.22);
+            let gene_sigma: f32 = rng.gen_range(0.015..0.040);
             let gene_agg: f32 = rng.gen_range(0.7..1.0); // high aggressivity
-            let gene_mut: f32 = rng.gen_range(0.001..0.005);
+            let gene_mut: f32 = rng.gen_range(0.001..0.004);
             let genome = [gene_r, gene_mu, gene_sigma, gene_agg];
 
             let ir = radius as i32 + 1;
@@ -373,6 +379,86 @@ impl WorldState {
                     let idx = pixel_idx(cx + dx, cy + dy);
                     stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
                           idx, m * 0.9, 0.8, genome, gene_mut);
+                }
+            }
+        }
+
+        // ---- PATTERN 7: Lenia Orbium seeds (known stable creatures) ----
+        // Orbium is the canonical Lenia "glider" — a ring-shaped pattern that
+        // moves through space when parameters are in the sweet spot.
+        // Parameters from the Lenia paper: R=13, mu=0.15, sigma=0.015
+        // We seed several with slight variations to explore the attractor basin.
+        let lenia_creatures: Vec<([f32; 4], f32, f32, &str)> = vec![
+            // [r, mu, sigma, agg], mut_rate, pattern_radius, name
+            ([13.0, 0.15, 0.017, 0.0], 0.001, 13.0, "orbium"),       // classic orbium
+            ([13.0, 0.15, 0.017, 0.0], 0.001, 13.0, "orbium"),       // second orbium
+            ([13.0, 0.14, 0.014, 0.0], 0.001, 12.0, "geminium"),     // geminium (splits)
+            ([14.0, 0.20, 0.030, 0.0], 0.001, 14.0, "scutium"),      // scutium (shield)
+            ([10.0, 0.13, 0.012, 0.0], 0.002, 10.0, "small_orbium"), // compact orbium
+            ([12.0, 0.16, 0.020, 0.0], 0.001, 12.0, "orbium_var"),   // orbium variant
+            ([11.0, 0.18, 0.025, 0.0], 0.002, 11.0, "smooth_life"),  // smooth-life like
+            ([15.0, 0.12, 0.013, 0.0], 0.001, 15.0, "large_orbium"), // large slow orbium
+        ];
+
+        for (genome, mut_rate, pattern_r, _name) in &lenia_creatures {
+            let cx = rng.gen_range(20..(w - 20));
+            let cy = rng.gen_range(20..(h - 20));
+            let pr = *pattern_r;
+            let ir = pr as i32 + 2;
+
+            // Orbium mass profile: a smooth ring with peak at ~r/2
+            // m(d) ≈ exp(-((d/r - 0.5)² / (2 * 0.15²))) — same as the kernel shape
+            // This makes the initial condition a natural eigenfunction of the Lenia operator.
+            for dy in -ir..=ir {
+                for dx in -ir..=ir {
+                    let dist = ((dx * dx + dy * dy) as f32).sqrt();
+                    if dist > pr { continue; }
+                    let normalized = dist / pr;
+                    let diff = normalized - 0.5;
+                    let m = (-diff * diff / (2.0 * 0.15 * 0.15)).exp();
+                    if m < 0.01 { continue; }
+                    let idx = pixel_idx(cx + dx, cy + dy);
+                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
+                          idx, m * 0.85, 0.7, *genome, *mut_rate);
+                }
+            }
+
+            // Add slight asymmetry to break symmetry and enable movement
+            let asym_dx: i32 = rng.gen_range(-2..3);
+            let asym_dy: i32 = rng.gen_range(-2..3);
+            for d in 0..3 {
+                let idx = pixel_idx(cx + asym_dx + d, cy + asym_dy);
+                mass_data[idx] = (mass_data[idx] + 0.15).min(1.0);
+            }
+        }
+
+        // ---- PATTERN 8: Lenia blob clusters (proto-creatures) ----
+        // Smooth circular blobs with tight Lenia parameters — these provide
+        // raw material that can self-organize into creatures over time.
+        let num_blobs = 15;
+        for _ in 0..num_blobs {
+            let cx = rng.gen_range(0..w);
+            let cy = rng.gen_range(0..h);
+            let blob_r = rng.gen_range(8..16) as f32;
+            // Tight Lenia parameters
+            let gene_r: f32 = rng.gen_range(9.0..14.0);
+            let gene_mu: f32 = rng.gen_range(0.12..0.20);
+            let gene_sigma: f32 = rng.gen_range(0.012..0.030);
+            let gene_agg: f32 = 0.0; // passive
+            let gene_mut: f32 = rng.gen_range(0.001..0.003);
+            let genome = [gene_r, gene_mu, gene_sigma, gene_agg];
+
+            let ir = blob_r as i32 + 1;
+            for dy in -ir..=ir {
+                for dx in -ir..=ir {
+                    let dist = ((dx * dx + dy * dy) as f32).sqrt();
+                    if dist > blob_r { continue; }
+                    // Smooth Gaussian falloff
+                    let m = (-dist * dist / (2.0 * blob_r * blob_r * 0.2)).exp();
+                    if m < 0.01 { continue; }
+                    let idx = pixel_idx(cx + dx, cy + dy);
+                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
+                          idx, m * 0.7, 0.6, genome, gene_mut);
                 }
             }
         }

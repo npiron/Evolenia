@@ -76,7 +76,8 @@ impl HudRenderer {
 
         let hud_text = build_hud_text(params, frame, fps, camera_zoom);
 
-        let mut text_buf = TextBuffer::new(&mut self.font_system, Metrics::new(14.0, 18.0));
+        // Larger font for better readability (was 14.0/18.0)
+        let mut text_buf = TextBuffer::new(&mut self.font_system, Metrics::new(18.0, 24.0));
         text_buf.set_size(&mut self.font_system, Some(win_w as f32), Some(win_h as f32));
         text_buf.set_text(
             &mut self.font_system,
@@ -95,8 +96,8 @@ impl HudRenderer {
                 &self.glyph_viewport,
                 [TextArea {
                     buffer: &text_buf,
-                    left: 10.0,
-                    top: 10.0,
+                    left: 16.0,
+                    top: 16.0,
                     scale: 1.0,
                     bounds: TextBounds {
                         left: 0,

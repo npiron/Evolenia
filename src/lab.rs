@@ -131,6 +131,7 @@ pub struct LabState {
 
     // -- Config presets --
     pub preset_name: String,
+    pub selected_preset_index: usize,
 
     // -- Status messages --
     pub status_message: Option<(String, Instant)>,
@@ -172,6 +173,7 @@ impl Default for LabState {
             comparison_b: None,
 
             preset_name: String::from("default"),
+            selected_preset_index: 0,
 
             status_message: None,
         }

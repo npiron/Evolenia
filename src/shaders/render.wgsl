@@ -50,9 +50,13 @@ struct RenderParams {
 }
 
 struct CameraUniforms {
-    offset: vec2<f32>, // world-UV pan offset
-    zoom: f32,         // zoom factor (>1 = zoomed in)
-    _pad: f32,
+    offset: vec2<f32>,      // world-UV pan offset
+    zoom: f32,              // zoom factor (>1 = zoomed in)
+    aspect_ratio: f32,      // window aspect ratio
+    world_aspect: f32,      // world aspect ratio
+    _pad1: f32,
+    _pad2: f32,
+    _pad3: f32,
 }
 
 @group(0) @binding(0) var<uniform> render_params: RenderParams;
@@ -90,13 +94,31 @@ fn hsv2rgb(h: f32, s: f32, v: f32) -> vec3<f32> {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Apply camera: center UV, scale by 1/zoom, add pan offset, re-center
+    // Correct aspect ratio: scale UV so world appears square regardless of window shape
     let centered = in.uv - vec2<f32>(0.5, 0.5);
-    let world_uv = centered / camera.zoom + vec2<f32>(0.5, 0.5) + camera.offset;
+    
+    // Aspect ratio correction: if window is wider than world, add horizontal letterbox
+    var corrected = centered;
+    let ratio_correction = camera.aspect_ratio / camera.world_aspect;
+    if (ratio_correction > 1.0) {
+        // Window is wider than world - scale X to fit
+        corrected.x = corrected.x * ratio_correction;
+    } else {
+        // Window is taller than world - scale Y to fit
+        corrected.y = corrected.y / ratio_correction;
+    }
+    
+    let world_uv = corrected / camera.zoom + vec2<f32>(0.5, 0.5) + camera.offset;
 
-    // Toroidal wrap so the world tiles seamlessly when panning
-    let wx = ((world_uv.x % 1.0) + 1.0) % 1.0;
-    let wy = ((world_uv.y % 1.0) + 1.0) % 1.0;
+    // Outside the [0,1] world bounds: show gray background (no tiling)
+    let outside_bg = vec3<f32>(0.08, 0.08, 0.10);
+    if (world_uv.x < 0.0 || world_uv.x > 1.0 || world_uv.y < 0.0 || world_uv.y > 1.0) {
+        return vec4<f32>(outside_bg, 1.0);
+    }
+
+    // Clamp to world bounds (no toroidal wrap for rendering)
+    let wx = world_uv.x;
+    let wy = world_uv.y;
 
     let px = u32(wx * f32(render_params.width));
     let py = u32(wy * f32(render_params.height));
@@ -114,9 +136,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Mode 0: Species Color
     if render_params.visualization_mode == 0u {
         let species_color = vec3<f32>(
-            clamp(ga.x / 16.0, 0.0, 1.0),   // R = perception radius
-            clamp(ga.y, 0.0, 1.0),           // G = growth center μ
-            clamp(ga.z / 0.3, 0.0, 1.0)      // B = growth width σ
+            clamp(ga.x / 15.0, 0.0, 1.0),   // R = perception radius (max 15)
+            clamp(ga.y * 5.0, 0.0, 1.0),     // G = growth center μ (scaled: 0.15 → 0.75)
+            clamp(ga.z / 0.06, 0.0, 1.0)     // B = growth width σ (scaled for Lenia range)
         );
         let predator_glow = step(0.7, ga.w) * vec3<f32>(1.0, 0.5, 0.0);
         let final_color = clamp(species_color + predator_glow * 0.3, vec3<f32>(0.0), vec3<f32>(1.0));

@@ -1,1 +1,17 @@
+# Build artifacts
 /target
+
+# Experiment runs (large data, screenshots, logs)
+/runs/
+
+# Binary snapshots
+*.snap
+
+# OS files
+.DS_Store
+*.swp
+*~
+
+# IDE
+.idea/
+.vscode/

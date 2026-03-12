@@ -97,13 +97,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let base_seed = (gid.y * params.width + gid.x) ^ params.frame ^ 0xDEADBEEFu;
 
     // ================== EARLY EXIT FOR EMPTY REGIONS ==================
-    // Skip the expensive convolution (~169 global reads) for dead pixels
-    // with no living neighbors within kernel range. With ~85% fill=0,
-    // this skips the majority of compute work.
+    // Skip the expensive convolution for dead pixels with no living
+    // neighbors within kernel range. With ~85% fill=0 this skips most work.
     if (m < 0.001) {
-        let max_r_i = 9;
+        let max_r_i = 14; // must be >= max_r used in convolution
         let hr = max_r_i / 2;
-        // Sparse 12-point check: cardinal at max_r, diagonals at half, immediate neighbors
+        // Sparse 16-point check: cardinal at max_r, diagonals at half, immediate neighbors, mid-ring
         let has_life =
             mass_in[idx(x + max_r_i, y)] > 0.001 ||
             mass_in[idx(x - max_r_i, y)] > 0.001 ||
@@ -113,6 +112,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             mass_in[idx(x - hr, y + hr)] > 0.001 ||
             mass_in[idx(x + hr, y - hr)] > 0.001 ||
             mass_in[idx(x - hr, y - hr)] > 0.001 ||
+            mass_in[idx(x + hr, y)] > 0.001 ||
+            mass_in[idx(x - hr, y)] > 0.001 ||
+            mass_in[idx(x, y + hr)] > 0.001 ||
+            mass_in[idx(x, y - hr)] > 0.001 ||
             mass_in[idx(x + 1, y)] > 0.001 ||
             mass_in[idx(x - 1, y)] > 0.001 ||
             mass_in[idx(x, y + 1)] > 0.001 ||
@@ -128,15 +131,15 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 
     // ================== LENIA CONVOLUTION ==================
-    // Blend between three fixed kernel radii (3, 5, 9) — reduced max to 9 for stability and speed
-    // Performance tuning:
-    // - max_r = 6  → 13×13 = 169 samples (2× faster, good for development)
-    // - max_r = 9  → 19×19 = 361 samples (balanced, default)
-    // - max_r = 12 → 25×25 = 625 samples (highest quality, slow)
-    let r_small = 3.0;
-    let r_mid   = 5.0;
-    let r_large = 9.0;
-    let max_r   = 6;  // Balanced default: respects full evolved radius range up to 9
+    // Four-tier kernel interpolation supporting radii from 3 to 15.
+    // max_r=13 enables proper Lenia patterns (orbium, geminium, etc.)
+    // which require effective radii of 10-15 pixels.
+    // 27×27 = 729 samples per pixel — fast enough on modern GPUs.
+    let r_small  = 3.0;
+    let r_mid    = 6.0;
+    let r_large  = 10.0;
+    let r_xlarge = 15.0;
+    let max_r    = 13;  // 27×27 convolution — required for Lenia creatures
 
     var U = 0.0; // Perceived density (convolution result)
     var kernel_sum = 0.0;
@@ -149,26 +152,31 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 continue;
             }
 
-            // Interpolate kernel weight based on genome radius r
+            // Four-tier smooth interpolation based on genome radius r
             var w = 0.0;
             if (r <= r_small) {
                 w = kernel_weight(dist, r_small);
-                // Fade out contributions beyond small radius
                 if (dist > r_small * 1.5) { w = 0.0; }
             } else if (r <= r_mid) {
                 let t = (r - r_small) / (r_mid - r_small);
                 let w_s = kernel_weight(dist, r_small);
                 let w_m = kernel_weight(dist, r_mid);
-                // Fade small kernel beyond its effective range
                 let ws_faded = select(0.0, w_s, dist <= r_small * 1.5);
                 w = mix(ws_faded, w_m, t);
                 if (dist > r_mid * 1.5) { w *= (1.0 - t); }
-            } else {
+            } else if (r <= r_large) {
                 let t = (r - r_mid) / (r_large - r_mid);
                 let w_m = kernel_weight(dist, r_mid);
                 let w_l = kernel_weight(dist, r_large);
                 let wm_faded = select(0.0, w_m, dist <= r_mid * 1.5);
                 w = mix(wm_faded, w_l, t);
+                if (dist > r_large * 1.5) { w *= (1.0 - t); }
+            } else {
+                let t = clamp((r - r_large) / (r_xlarge - r_large), 0.0, 1.0);
+                let w_l = kernel_weight(dist, r_large);
+                let w_x = kernel_weight(dist, r_xlarge);
+                let wl_faded = select(0.0, w_l, dist <= r_large * 1.5);
+                w = mix(wl_faded, w_x, t);
             }
 
             if (w > 0.001) {
@@ -193,17 +201,17 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // ================== METABOLISM ==================
     // Cost scales with genomic complexity (Darwinian parsimony)
-    // Non-linear radius cost: pow(r/9, exponent) — quadratic penalizes large perception
+    // Costs reduced vs v1 so Lenia-scale creatures (R=10-15) can survive.
+    // Non-linear radius cost: pow(r/15, exponent) — normalized to max radius 15
     let genomic_complexity = length(vec3<f32>(mu, sigma, agg));
-    let radius_penalty = pow(r / 9.0, params.radius_cost_exp) * 0.03;
-    let agg_penalty = agg * agg * 0.04 * params.predation_factor;
-    let predator_interference = agg * agg * agg * 0.02 * params.predation_factor;
-    let cost = (genomic_complexity * 0.02 + radius_penalty + agg_penalty + predator_interference) * m;
+    let radius_penalty = pow(r / 15.0, params.radius_cost_exp) * 0.02;
+    let agg_penalty = agg * agg * 0.03 * params.predation_factor;
+    let predator_interference = agg * agg * agg * 0.015 * params.predation_factor;
+    let cost = (genomic_complexity * 0.012 + radius_penalty + agg_penalty + predator_interference) * m;
     // Absorption from local resource map (nutrient uptake)
-    // Break-even at ~30% resource depletion → meaningful survival pressure
-    // Aggressivity-mobility tradeoff: predators see less (reduced effective radius in kernel)
+    // Increased absorption to support larger organisms with bigger radii
     let prey_bonus = (1.0 - agg) * 0.010;
-    let absorption = resource_map[i] * m * (0.032 + prey_bonus);
+    let absorption = resource_map[i] * m * (0.040 + prey_bonus);
     var energy_new = clamp(e + absorption - cost, 0.0, 1.0);
 
     // Starvation: significant mass decay when energy depleted
@@ -289,16 +297,51 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         seed = pcg_hash(seed + 104u);
         let noise_mut = rand_signed(seed);
 
-        // Mutate each gene with rate-scaled noise — smaller steps to avoid genome drift
+        // Mutate each gene with rate-scaled noise — smaller steps to preserve Lenia patterns
         let mm = params.mutation_rate_mult;
-        genome_a_new.x = clamp(genome_a_new.x + noise_r     * mut_rate * mm * 4.0,  2.0, 9.0);
-        genome_a_new.y = clamp(genome_a_new.y + noise_mu    * mut_rate * mm * 0.3,  0.05, 0.5);
-        genome_a_new.z = clamp(genome_a_new.z + noise_sigma * mut_rate * mm * 0.15, 0.02, 0.2);
-        genome_a_new.w = clamp(genome_a_new.w + noise_agg   * mut_rate * mm * 0.5,  0.0, 1.0);
+        genome_a_new.x = clamp(genome_a_new.x + noise_r     * mut_rate * mm * 3.0,  3.0, 15.0);
+        genome_a_new.y = clamp(genome_a_new.y + noise_mu    * mut_rate * mm * 0.15, 0.05, 0.35);
+        genome_a_new.z = clamp(genome_a_new.z + noise_sigma * mut_rate * mm * 0.08, 0.005, 0.08);
+        genome_a_new.w = clamp(genome_a_new.w + noise_agg   * mut_rate * mm * 0.3,  0.0, 1.0);
 
         // Meta-mutation: mutation rate evolves too (smaller step)
         // Beta-prior prevents drift to 0 or 1
-        genome_b_new = clamp(genome_b_new + noise_mut * mm * 0.0003, 0.001, 0.01);
+        genome_b_new = clamp(genome_b_new + noise_mut * mm * 0.0002, 0.0005, 0.008);
+    }
+
+    // ================== GENOME CONSENSUS (spatial coherence) ==================
+    // Mass-weighted blending with immediate neighbors — creates coherent
+    // "organism" regions where nearby pixels share similar genomes.
+    // Without this, per-pixel mutations fragment genome into noise.
+    // Biologically: horizontal gene transfer / developmental coherence.
+    if (mass_new > 0.01) {
+        let blend_strength = 0.08; // subtle but cumulative over frames
+        var neighbor_genome_a = vec4<f32>(0.0);
+        var neighbor_genome_b = 0.0;
+        var neighbor_weight = 0.0;
+
+        // 4-connected neighbors, weighted by their mass
+        let nr = idx(x + 1, y); let mr = mass_in[nr];
+        let nl = idx(x - 1, y); let ml = mass_in[nl];
+        let nd = idx(x, y + 1); let md = mass_in[nd];
+        let nu = idx(x, y - 1); let mu_n = mass_in[nu];
+
+        neighbor_genome_a += genome_a_in[nr] * mr;
+        neighbor_genome_a += genome_a_in[nl] * ml;
+        neighbor_genome_a += genome_a_in[nd] * md;
+        neighbor_genome_a += genome_a_in[nu] * mu_n;
+        neighbor_genome_b += genome_b_in[nr] * mr;
+        neighbor_genome_b += genome_b_in[nl] * ml;
+        neighbor_genome_b += genome_b_in[nd] * md;
+        neighbor_genome_b += genome_b_in[nu] * mu_n;
+        neighbor_weight = mr + ml + md + mu_n;
+
+        if (neighbor_weight > 0.01) {
+            let avg_ga = neighbor_genome_a / neighbor_weight;
+            let avg_gb = neighbor_genome_b / neighbor_weight;
+            genome_a_new = mix(genome_a_new, avg_ga, blend_strength);
+            genome_b_new = mix(genome_b_new, avg_gb, blend_strength);
+        }
     }
 
     // ================== WRITE OUTPUTS ==================

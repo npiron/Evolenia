@@ -3,13 +3,19 @@
 // Camera state & GPU uniform for pan/zoom navigation.
 // ============================================================================
 
+use crate::world::{WORLD_WIDTH, WORLD_HEIGHT};
+
 /// GPU-side camera uniforms uploaded every frame.
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniforms {
     pub offset: [f32; 2],
     pub zoom: f32,
-    pub _pad: f32,
+    pub aspect_ratio: f32,      // window_width / window_height
+    pub world_aspect: f32,       // world_width / world_height
+    pub _pad1: f32,
+    pub _pad2: f32,
+    pub _pad3: f32,
 }
 
 impl Default for CameraUniforms {
@@ -17,7 +23,11 @@ impl Default for CameraUniforms {
         Self {
             offset: [0.0, 0.0],
             zoom: 1.0,
-            _pad: 0.0,
+            aspect_ratio: 1.0,
+            world_aspect: WORLD_WIDTH as f32 / WORLD_HEIGHT as f32,
+            _pad1: 0.0,
+            _pad2: 0.0,
+            _pad3: 0.0,
         }
     }
 }
@@ -73,11 +83,15 @@ impl CameraState {
     }
 
     /// Build the GPU uniform from current state.
-    pub fn uniforms(&self) -> CameraUniforms {
+    pub fn uniforms(&self, win_w: u32, win_h: u32) -> CameraUniforms {
         CameraUniforms {
             offset: self.offset,
             zoom: self.zoom,
-            _pad: 0.0,
+            aspect_ratio: win_w as f32 / win_h as f32,
+            world_aspect: WORLD_WIDTH as f32 / WORLD_HEIGHT as f32,
+            _pad1: 0.0,
+            _pad2: 0.0,
+            _pad3: 0.0,
         }
     }
 }

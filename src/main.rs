@@ -16,6 +16,9 @@ mod renderer;
 mod state_io;
 mod world;
 
+#[cfg(test)]
+mod tests;
+
 use app::{App, AppConfig};
 use headless::{run_headless, HeadlessConfig};
 use winit::event_loop::EventLoop;

@@ -44,20 +44,68 @@ fn render_minimal_overlay(
     lab: &mut LabState,
 ) {
     egui::Area::new(egui::Id::new("minimal_overlay"))
-        .fixed_pos(egui::pos2(10.0, 10.0))
+        .fixed_pos(egui::pos2(16.0, 16.0))
         .show(ctx, |ui| {
-            ui.visuals_mut().override_text_color = Some(egui::Color32::from_rgb(220, 220, 220));
-            let pause_str = if params.paused { " [PAUSED]" } else { "" };
-            ui.label(
-                egui::RichText::new(format!(
-                    "F: {}  FPS: {:.0}{}  | F1: Lab UI",
-                    lab.metrics_history.last().map_or(0, |m| m.frame),
-                    lab.metrics_history.last().map_or(0.0, |m| m.fps),
-                    pause_str,
-                ))
-                .monospace()
-                .size(13.0),
-            );
+            egui::Frame::new()
+                .fill(egui::Color32::from_rgb(18, 22, 32))  // Opaque background
+                .corner_radius(10)
+                .inner_margin(egui::Margin::symmetric(18, 14))
+                .stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(60, 130, 200)))
+                .show(ui, |ui| {
+                    let _pause_str = if params.paused { "  ⏸ PAUSED" } else { "" };
+                    let frame = lab.metrics_history.last().map_or(0, |m| m.frame);
+                    let fps = lab.metrics_history.last().map_or(0.0, |m| m.fps);
+                    
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new("🌌")
+                                .size(24.0),
+                        );
+                        ui.add_space(8.0);
+                        ui.label(
+                            egui::RichText::new("EvoLenia")
+                                .size(20.0)
+                                .strong()
+                                .color(egui::Color32::from_rgb(80, 180, 255)),
+                        );
+                        ui.add_space(20.0);
+                        ui.label(
+                            egui::RichText::new(format!("Frame: {}", frame))
+                                .monospace()
+                                .size(15.0)
+                                .color(egui::Color32::from_rgb(120, 220, 160)),
+                        );
+                        ui.add_space(12.0);
+                        ui.label(
+                            egui::RichText::new("•")
+                                .size(15.0)
+                                .color(egui::Color32::from_rgb(80, 80, 100)),
+                        );
+                        ui.add_space(12.0);
+                        ui.label(
+                            egui::RichText::new(format!("FPS: {:.0}", fps))
+                                .monospace()
+                                .size(15.0)
+                                .color(egui::Color32::from_rgb(255, 200, 100)),
+                        );
+                        if params.paused {
+                            ui.add_space(12.0);
+                            ui.label(
+                                egui::RichText::new("⏸ PAUSED")
+                                    .size(15.0)
+                                    .strong()
+                                    .color(egui::Color32::from_rgb(255, 120, 100)),
+                            );
+                        }
+                    });
+                    
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new("F1 → Research Lab  •  Space → Pause  •  WASD → Pan  •  Q/E → Zoom")
+                            .size(12.0)
+                            .color(egui::Color32::from_rgb(130, 140, 160)),
+                    );
+                });
         });
 }
 
@@ -69,12 +117,21 @@ fn render_left_panel(
     lab: &mut LabState,
 ) {
     egui::SidePanel::left("lab_panel")
-        .default_width(280.0)
-        .min_width(240.0)
-        .max_width(400.0)
+        .default_width(320.0)
+        .min_width(280.0)
+        .max_width(450.0)
         .show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.heading("🔬 EvoLenia Research Lab");
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("🔬").size(28.0));
+                    ui.add_space(8.0);
+                    ui.vertical(|ui| {
+                        ui.label(egui::RichText::new("EvoLenia").size(22.0).strong().color(egui::Color32::from_rgb(100, 200, 255)));
+                        ui.label(egui::RichText::new("Research Lab v2.0").size(13.0).color(egui::Color32::from_rgb(150, 150, 170)));
+                    });
+                });
+                ui.add_space(8.0);
                 ui.separator();
 
                 render_control_section(ui, params, lab);
@@ -535,11 +592,17 @@ fn render_view_toggles(ui: &mut egui::Ui, lab: &mut LabState) {
 
 fn render_right_analysis_panel(ctx: &egui::Context, lab: &mut LabState) {
     egui::SidePanel::right("analysis_panel")
-        .default_width(340.0)
-        .min_width(250.0)
-        .max_width(500.0)
+        .default_width(380.0)
+        .min_width(300.0)
+        .max_width(550.0)
         .show(ctx, |ui| {
-            ui.heading("📈 Analysis");
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("📈").size(24.0));
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("Live Analysis").size(20.0).strong().color(egui::Color32::from_rgb(150, 220, 150)));
+            });
+            ui.add_space(8.0);
             ui.separator();
 
             if lab.metrics_history.is_empty() {
@@ -599,8 +662,8 @@ fn render_right_analysis_panel(ctx: &egui::Context, lab: &mut LabState) {
 }
 
 fn stat_row(ui: &mut egui::Ui, label: &str, value: &str) {
-    ui.label(label);
-    ui.label(egui::RichText::new(value).monospace());
+    ui.label(egui::RichText::new(label).color(egui::Color32::from_rgb(180, 180, 200)));
+    ui.label(egui::RichText::new(value).monospace().strong().color(egui::Color32::from_rgb(220, 220, 240)));
     ui.end_row();
 }
 
