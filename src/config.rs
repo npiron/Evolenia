@@ -6,6 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 
+pub const TIME_STEP_MIN: f32 = 0.1;
+pub const TIME_STEP_MAX: f32 = 10.0;
+
 /// Runtime simulation parameters adjustable via the Research Lab UI.
 /// Every field here is wired to either a GPU uniform or engine state.
 #[derive(Clone, Debug, Serialize, Deserialize)]

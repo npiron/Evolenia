@@ -71,6 +71,65 @@ fn kernel_weight(dist: f32, radius: f32) -> f32 {
     return exp(-(diff * diff) / (2.0 * 0.15 * 0.15));
 }
 
+// ======================== LOCAL DIVERSITY / ENTROPY PROXY ========================
+// Fast proxy in [0,1]: mass-weighted variance of key genes in a 3x3 neighborhood.
+// Higher value => more local genomic diversity.
+fn local_diversity_entropy(x: i32, y: i32) -> f32 {
+    var wsum = 0.0;
+    var mu_mean = 0.0;
+    var sigma_mean = 0.0;
+    var agg_mean = 0.0;
+
+    for (var dy = -1; dy <= 1; dy = dy + 1) {
+        for (var dx = -1; dx <= 1; dx = dx + 1) {
+            let ni = idx(x + dx, y + dy);
+            let w = max(mass_in[ni], 0.001);
+            let g = genome_a_in[ni];
+            mu_mean += g.y * w;
+            sigma_mean += g.z * w;
+            agg_mean += g.w * w;
+            wsum += w;
+        }
+    }
+
+    if (wsum <= 0.001) {
+        return 0.0;
+    }
+
+    mu_mean /= wsum;
+    sigma_mean /= wsum;
+    agg_mean /= wsum;
+
+    var mu_var = 0.0;
+    var sigma_var = 0.0;
+    var agg_var = 0.0;
+
+    for (var dy = -1; dy <= 1; dy = dy + 1) {
+        for (var dx = -1; dx <= 1; dx = dx + 1) {
+            let ni = idx(x + dx, y + dy);
+            let w = max(mass_in[ni], 0.001);
+            let g = genome_a_in[ni];
+            let dmu = g.y - mu_mean;
+            let dsigma = g.z - sigma_mean;
+            let dagg = g.w - agg_mean;
+            mu_var += dmu * dmu * w;
+            sigma_var += dsigma * dsigma * w;
+            agg_var += dagg * dagg * w;
+        }
+    }
+
+    mu_var /= wsum;
+    sigma_var /= wsum;
+    agg_var /= wsum;
+
+    // Normalize per-gene variance by expected max ranges.
+    let mu_norm = clamp(mu_var / (0.30 * 0.30), 0.0, 1.0);
+    let sigma_norm = clamp(sigma_var / (0.08 * 0.08), 0.0, 1.0);
+    let agg_norm = clamp(agg_var / (1.00 * 1.00), 0.0, 1.0);
+
+    return clamp((mu_norm + sigma_norm + agg_norm) / 3.0, 0.0, 1.0);
+}
+
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let x = i32(gid.x);
@@ -196,7 +255,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Gaussian bell: G(U; μ, σ) = exp(-((U - μ)² / (2σ²)))
     // Biologically: organisms thrive at density μ, tolerate ±σ
     let growth_raw = exp(-((U - mu) * (U - mu)) / (2.0 * sigma * sigma));
-    let dM = 2.0 * growth_raw - 1.0; // ∈ [-1, +1]
+    let resource_gate = smoothstep(0.08, 0.35, resource_map[i]);
+    let dM = (2.0 * growth_raw - 1.0) * resource_gate; // ∈ [-1, +1], resource-limited
     var mass_candidate = clamp(m + params.dt * dM, 0.0, 1.0);
 
     // ================== METABOLISM ==================
@@ -207,11 +267,22 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let radius_penalty = pow(r / 15.0, params.radius_cost_exp) * 0.02;
     let agg_penalty = agg * agg * 0.03 * params.predation_factor;
     let predator_interference = agg * agg * agg * 0.015 * params.predation_factor;
-    let cost = (genomic_complexity * 0.012 + radius_penalty + agg_penalty + predator_interference) * m;
+    var cost = (genomic_complexity * 0.012 + radius_penalty + agg_penalty + predator_interference) * m;
     // Absorption from local resource map (nutrient uptake)
     // Increased absorption to support larger organisms with bigger radii
     let prey_bonus = (1.0 - agg) * 0.010;
-    let absorption = resource_map[i] * m * (0.040 + prey_bonus);
+    var absorption = resource_map[i] * m * (0.040 + prey_bonus);
+
+    // Entropy-energy coupling:
+    // - Diverse neighborhoods get better energy uptake.
+    // - Homogeneous neighborhoods pay extra metabolic tax.
+    // Effect is bounded (±30%) for stability.
+    let entropy = local_diversity_entropy(x, y);
+    let entropy_bonus = clamp(1.0 + 0.25 * entropy, 0.70, 1.30);
+    let homogeneity_tax = clamp(1.0 + 0.20 * (1.0 - entropy), 0.70, 1.30);
+    absorption *= entropy_bonus;
+    cost *= homogeneity_tax;
+
     var energy_new = clamp(e + absorption - cost, 0.0, 1.0);
 
     // Starvation: significant mass decay when energy depleted
@@ -223,32 +294,56 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // ================== MASS-CONSERVATIVE ADVECTION ==================
     // Mass is TRANSFERRED, never copied. Conservation: flux_in = flux_out
     let vel = velocity[i];
+    let self_mobility = clamp(1.0 - params.agg_mobility * agg, 0.05, 1.0);
+    let vel_eff = vel * self_mobility;
 
     // Cardinal direction vectors
     var total_flux_out = 0.0;
     var total_flux_in = 0.0;
 
     // Flux limiters — unrolled (WGSL requires constant indices for local arrays)
-    // Cap per direction = mass/8 (not /4): prevents >50% total outflow per step
+    // Cap per direction = mass/12: reduces diffuse leakage and preserves patch boundaries
     // right
-    { let fc = dot(vel, vec2<f32>(1.0, 0.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 8.0);
-      let ni = idx(x + 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
-      let fi = dot(vn, vec2<f32>(-1.0, 0.0)); total_flux_in += clamp(fi, 0.0, mn / 8.0); }
+        { let fc = dot(vel_eff, vec2<f32>(1.0, 0.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 12.0);
+            let ni = idx(x + 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
+            let neigh_agg = genome_a_in[ni].w;
+            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
+            let vn_eff = vn * neigh_mobility;
+            let fi = dot(vn_eff, vec2<f32>(-1.0, 0.0)); total_flux_in += clamp(fi, 0.0, mn / 12.0); }
     // left
-    { let fc = dot(vel, vec2<f32>(-1.0, 0.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 8.0);
-      let ni = idx(x - 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
-      let fi = dot(vn, vec2<f32>(1.0, 0.0)); total_flux_in += clamp(fi, 0.0, mn / 8.0); }
+        { let fc = dot(vel_eff, vec2<f32>(-1.0, 0.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 12.0);
+            let ni = idx(x - 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
+            let neigh_agg = genome_a_in[ni].w;
+            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
+            let vn_eff = vn * neigh_mobility;
+            let fi = dot(vn_eff, vec2<f32>(1.0, 0.0)); total_flux_in += clamp(fi, 0.0, mn / 12.0); }
     // down
-    { let fc = dot(vel, vec2<f32>(0.0, 1.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 8.0);
-      let ni = idx(x, y + 1); let vn = velocity[ni]; let mn = mass_in[ni];
-      let fi = dot(vn, vec2<f32>(0.0, -1.0)); total_flux_in += clamp(fi, 0.0, mn / 8.0); }
+        { let fc = dot(vel_eff, vec2<f32>(0.0, 1.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 12.0);
+            let ni = idx(x, y + 1); let vn = velocity[ni]; let mn = mass_in[ni];
+            let neigh_agg = genome_a_in[ni].w;
+            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
+            let vn_eff = vn * neigh_mobility;
+            let fi = dot(vn_eff, vec2<f32>(0.0, -1.0)); total_flux_in += clamp(fi, 0.0, mn / 12.0); }
     // up
-    { let fc = dot(vel, vec2<f32>(0.0, -1.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 8.0);
-      let ni = idx(x, y - 1); let vn = velocity[ni]; let mn = mass_in[ni];
-      let fi = dot(vn, vec2<f32>(0.0, 1.0)); total_flux_in += clamp(fi, 0.0, mn / 8.0); }
+        { let fc = dot(vel_eff, vec2<f32>(0.0, -1.0)); total_flux_out += clamp(fc, 0.0, mass_candidate / 12.0);
+            let ni = idx(x, y - 1); let vn = velocity[ni]; let mn = mass_in[ni];
+            let neigh_agg = genome_a_in[ni].w;
+            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
+            let vn_eff = vn * neigh_mobility;
+            let fi = dot(vn_eff, vec2<f32>(0.0, 1.0)); total_flux_in += clamp(fi, 0.0, mn / 12.0); }
 
     var mass_new = mass_candidate + total_flux_in - total_flux_out;
     mass_new = clamp(mass_new, 0.0, 1.0);
+
+    // Anti-uniformization guards:
+    // 1) Avoid spontaneous births in isolated near-empty cells.
+    // 2) Prune very low-mass dust to prevent whole-screen thin films.
+    if (m < 0.003 && total_flux_in < 0.0015 && growth_raw < 0.98) {
+        mass_new = 0.0;
+    }
+    if (mass_new < 0.004 && total_flux_in < 0.0008) {
+        mass_new = 0.0;
+    }
 
     // ================== DNA ADVECTION — STOCHASTIC SEGREGATION ==================
     // When mass flows from neighbor to self, the neighbor's genome can
@@ -261,22 +356,34 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Genome advection — unrolled
     // right
     { let ni = idx(x + 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
-      let fi = clamp(dot(vn, vec2<f32>(-1.0, 0.0)), 0.0, mn / 4.0);
+            let neigh_agg = genome_a_in[ni].w;
+            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
+            let vn_eff = vn * neigh_mobility;
+            let fi = clamp(dot(vn_eff, vec2<f32>(-1.0, 0.0)), 0.0, mn / 4.0);
       if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 1u);
         if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
     // left
     { let ni = idx(x - 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
-      let fi = clamp(dot(vn, vec2<f32>(1.0, 0.0)), 0.0, mn / 4.0);
+            let neigh_agg = genome_a_in[ni].w;
+            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
+            let vn_eff = vn * neigh_mobility;
+            let fi = clamp(dot(vn_eff, vec2<f32>(1.0, 0.0)), 0.0, mn / 4.0);
       if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 2u);
         if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
     // down
     { let ni = idx(x, y + 1); let vn = velocity[ni]; let mn = mass_in[ni];
-      let fi = clamp(dot(vn, vec2<f32>(0.0, -1.0)), 0.0, mn / 4.0);
+            let neigh_agg = genome_a_in[ni].w;
+            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
+            let vn_eff = vn * neigh_mobility;
+            let fi = clamp(dot(vn_eff, vec2<f32>(0.0, -1.0)), 0.0, mn / 4.0);
       if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 3u);
         if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
     // up
     { let ni = idx(x, y - 1); let vn = velocity[ni]; let mn = mass_in[ni];
-      let fi = clamp(dot(vn, vec2<f32>(0.0, 1.0)), 0.0, mn / 4.0);
+            let neigh_agg = genome_a_in[ni].w;
+            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
+            let vn_eff = vn * neigh_mobility;
+            let fi = clamp(dot(vn_eff, vec2<f32>(0.0, 1.0)), 0.0, mn / 4.0);
       if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 4u);
         if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
 
@@ -284,6 +391,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Only living cells mutate (dead cells are inert)
     if (mass_new > 0.01) {
         let mut_rate = genome_b_new;
+        let stress = clamp((0.35 - energy_new) / 0.35, 0.0, 1.0);
+        let stress_boost = 1.0 + 1.8 * stress;
 
         // Independent noise per gene channel
         seed = pcg_hash(seed + 100u);
@@ -299,14 +408,15 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
         // Mutate each gene with rate-scaled noise — smaller steps to preserve Lenia patterns
         let mm = params.mutation_rate_mult;
-        genome_a_new.x = clamp(genome_a_new.x + noise_r     * mut_rate * mm * 3.0,  3.0, 15.0);
-        genome_a_new.y = clamp(genome_a_new.y + noise_mu    * mut_rate * mm * 0.15, 0.05, 0.35);
-        genome_a_new.z = clamp(genome_a_new.z + noise_sigma * mut_rate * mm * 0.08, 0.005, 0.08);
-        genome_a_new.w = clamp(genome_a_new.w + noise_agg   * mut_rate * mm * 0.3,  0.0, 1.0);
+        let mm_eff = mm * stress_boost;
+        genome_a_new.x = clamp(genome_a_new.x + noise_r     * mut_rate * mm_eff * 3.0,  3.0, 15.0);
+        genome_a_new.y = clamp(genome_a_new.y + noise_mu    * mut_rate * mm_eff * 0.15, 0.05, 0.35);
+        genome_a_new.z = clamp(genome_a_new.z + noise_sigma * mut_rate * mm_eff * 0.08, 0.005, 0.08);
+        genome_a_new.w = clamp(genome_a_new.w + noise_agg   * mut_rate * mm_eff * 0.3,  0.0, 1.0);
 
         // Meta-mutation: mutation rate evolves too (smaller step)
         // Beta-prior prevents drift to 0 or 1
-        genome_b_new = clamp(genome_b_new + noise_mut * mm * 0.0002, 0.0005, 0.008);
+        genome_b_new = clamp(genome_b_new + noise_mut * mm_eff * 0.0002, 0.0005, 0.008);
     }
 
     // ================== GENOME CONSENSUS (spatial coherence) ==================
@@ -315,7 +425,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Without this, per-pixel mutations fragment genome into noise.
     // Biologically: horizontal gene transfer / developmental coherence.
     if (mass_new > 0.01) {
-        let blend_strength = 0.08; // subtle but cumulative over frames
+        let blend_strength = clamp(0.09 - 0.012 * params.mutation_rate_mult, 0.02, 0.08);
         var neighbor_genome_a = vec4<f32>(0.0);
         var neighbor_genome_b = 0.0;
         var neighbor_weight = 0.0;

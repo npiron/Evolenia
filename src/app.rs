@@ -14,7 +14,7 @@ use winit::{
 };
 
 use crate::camera::CameraState;
-use crate::config::{SimulationParams, VIS_MODE_COUNT};
+use crate::config::{SimulationParams, TIME_STEP_MAX, TIME_STEP_MIN, VIS_MODE_COUNT};
 use crate::input::KeysHeld;
 use crate::lab::LabState;
 use crate::lab_ui;
@@ -115,7 +115,9 @@ impl ApplicationHandler for App {
 
         surface.configure(&device, &surface_config);
 
-        let mut world = WorldState::new(&device);
+        let sim_params = SimulationParams::default();
+        let mut world =
+            WorldState::new_with_config(&device, sim_params.effective_seed(), &sim_params);
         if let Some(path) = &self.config.initial_state_path {
             match state_io::load_snapshot(path) {
                 Ok(snapshot) => {
@@ -214,7 +216,7 @@ impl ApplicationHandler for App {
             window: window.clone(),
             camera: CameraState::default(),
             keys: KeysHeld::default(),
-            sim_params: SimulationParams::default(),
+            sim_params,
             hud,
             egui_ctx,
             egui_winit_state,
@@ -446,11 +448,11 @@ fn handle_keyboard(
             }
             NamedKey::ArrowUp if pressed => {
                 state.sim_params.time_step =
-                    (state.sim_params.time_step * 1.1).min(2.0);
+                    (state.sim_params.time_step * 1.1).min(TIME_STEP_MAX);
             }
             NamedKey::ArrowDown if pressed => {
                 state.sim_params.time_step =
-                    (state.sim_params.time_step * 0.9).max(0.1);
+                    (state.sim_params.time_step * 0.9).max(TIME_STEP_MIN);
             }
             NamedKey::ArrowRight if pressed => {
                 state.sim_params.simulation_speed =
@@ -521,7 +523,7 @@ fn redraw(state: &mut AppState) {
     // Restart
     if state.lab.restart_requested {
         let seed = state.sim_params.effective_seed();
-        state.world = WorldState::new_with_seed(&state.device, seed);
+        state.world = WorldState::new_with_config(&state.device, seed, &state.sim_params);
         state.pipelines =
             create_pipelines(&state.device, &state.world, state.surface_config.format);
         state.lab.restart_requested = false;

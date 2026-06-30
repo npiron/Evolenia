@@ -62,6 +62,8 @@ fn normalize(@builtin(global_invocation_id) gid: vec3<u32>) {
         let damping = f32(params.damping_x1000) / 1000.0;
         let correction = 1.0 + (raw_correction - 1.0) * damping;
         let corrected = clamp(mass[gid.x] * correction, 0.0, 1.0);
-        mass[gid.x] = corrected;
+        // Dust floor: prevent thin-film amplification over the whole world.
+        // Slightly relaxes exact conservation in favor of ecological patchiness.
+        mass[gid.x] = select(corrected, 0.0, corrected < 0.002);
     }
 }

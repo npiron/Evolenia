@@ -6,6 +6,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use rand::Rng;
+use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use wgpu::util::DeviceExt;
 
@@ -145,15 +146,23 @@ pub struct WorldState {
 
 impl WorldState {
     pub fn new(device: &wgpu::Device) -> Self {
-        Self::new_with_seed(device, None)
+        Self::new_with_config(device, None, &SimulationParams::default())
     }
 
-    pub fn new_with_seed(device: &wgpu::Device, seed: Option<u64>) -> Self {
+    pub fn new_with_config(
+        device: &wgpu::Device,
+        seed: Option<u64>,
+        params: &SimulationParams,
+    ) -> Self {
         let n = total_pixels() as usize;
         let mut rng: rand::rngs::StdRng = match seed {
             Some(s) => rand::rngs::StdRng::seed_from_u64(s),
             None => rand::rngs::StdRng::from_entropy(),
         };
+
+        let cluster_count_hint = params.num_seed_clusters.clamp(5, 100) as f32;
+        let cluster_size_scale = params.seed_cluster_size.clamp(0.5, 3.0);
+        let target_fill = params.initial_mass_fill.clamp(0.05, 0.5);
 
         // ---- Initialize data on CPU ----
         let mut mass_data = vec![0.0f32; n];
@@ -216,11 +225,11 @@ impl WorldState {
 
         // ---- PATTERN 1: Gaussian clusters (classic) ----
         // Larger clusters with Lenia-appropriate radii
-        let num_clusters = 20;
+        let num_clusters = ((cluster_count_hint * 0.42).round() as i32).max(4);
         for _ in 0..num_clusters {
             let cx = rng.gen_range(0..w);
             let cy = rng.gen_range(0..h);
-            let radius = rng.gen_range(8..18) as f32;
+            let radius = rng.gen_range(8.0..18.0) * cluster_size_scale;
             let (genome, mut_rate) = random_genome(&mut rng);
 
             let ir = radius as i32 + 1;
@@ -237,11 +246,11 @@ impl WorldState {
         }
 
         // ---- PATTERN 2: Rings / annuli (Lenia-scale) ----
-        let num_rings = 8;
+        let num_rings = ((cluster_count_hint * 0.16).round() as i32).max(2);
         for _ in 0..num_rings {
             let cx = rng.gen_range(0..w);
             let cy = rng.gen_range(0..h);
-            let outer_r = rng.gen_range(12..26) as f32;
+            let outer_r = rng.gen_range(12.0..26.0) * cluster_size_scale;
             let inner_r = outer_r * rng.gen_range(0.4..0.7);
             let thickness = (outer_r - inner_r).max(2.0);
             let (genome, mut_rate) = random_genome(&mut rng);
@@ -264,13 +273,13 @@ impl WorldState {
         }
 
         // ---- PATTERN 3: Lines / filaments ----
-        let num_lines = 6;
+        let num_lines = ((cluster_count_hint * 0.12).round() as i32).max(2);
         for _ in 0..num_lines {
             let x0 = rng.gen_range(0..w);
             let y0 = rng.gen_range(0..h);
             let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
-            let length = rng.gen_range(30..80) as f32;
-            let half_width = rng.gen_range(1.5..4.0_f32);
+            let length = rng.gen_range(30.0..80.0) * cluster_size_scale;
+            let half_width = rng.gen_range(1.5..4.0_f32) * cluster_size_scale;
             let (genome, mut_rate) = random_genome(&mut rng);
             // Line with slight curve
             let curvature: f32 = rng.gen_range(-0.02..0.02);
@@ -297,14 +306,14 @@ impl WorldState {
         }
 
         // ---- PATTERN 4: Spirals ----
-        let num_spirals = 4;
+        let num_spirals = ((cluster_count_hint * 0.09).round() as i32).max(1);
         for _ in 0..num_spirals {
             let cx = rng.gen_range(0..w) as f32;
             let cy = rng.gen_range(0..h) as f32;
             let arms: u32 = rng.gen_range(2..5);
             let max_angle: f32 = rng.gen_range(3.0..6.0); // radians of spiral
-            let scale = rng.gen_range(15.0..35.0_f32);
-            let arm_width = rng.gen_range(1.5..3.5_f32);
+            let scale = rng.gen_range(15.0..35.0_f32) * cluster_size_scale;
+            let arm_width = rng.gen_range(1.5..3.5_f32) * cluster_size_scale;
             let (genome, mut_rate) = random_genome(&mut rng);
 
             let steps = (max_angle * scale * 2.0) as i32;
@@ -334,11 +343,11 @@ impl WorldState {
         }
 
         // ---- PATTERN 5: Scattered noise patches (diffuse clouds) ----
-        let num_patches = 10;
+        let num_patches = ((cluster_count_hint * 0.20).round() as i32).max(3);
         for _ in 0..num_patches {
             let cx = rng.gen_range(0..w);
             let cy = rng.gen_range(0..h);
-            let patch_r = rng.gen_range(15..40) as i32;
+            let patch_r = (rng.gen_range(15.0..40.0) * cluster_size_scale) as i32;
             let density: f32 = rng.gen_range(0.05..0.15);
             let (genome, mut_rate) = random_genome(&mut rng);
 
@@ -358,11 +367,12 @@ impl WorldState {
         }
 
         // ---- PATTERN 6: Apex predator nests (high aggressivity, small, high energy) ----
-        let num_predators = 5;
+        let predation_bias = params.predation_factor.clamp(0.0, 3.0);
+        let num_predators = (1.0 + predation_bias * 2.0).round() as i32;
         for _ in 0..num_predators {
             let cx = rng.gen_range(0..w);
             let cy = rng.gen_range(0..h);
-            let radius = rng.gen_range(4..9) as f32;
+            let radius = rng.gen_range(4.0..9.0) * cluster_size_scale;
             let gene_r: f32 = rng.gen_range(7.0..12.0);
             let gene_mu: f32 = rng.gen_range(0.12..0.22);
             let gene_sigma: f32 = rng.gen_range(0.015..0.040);
@@ -400,10 +410,19 @@ impl WorldState {
             ([15.0, 0.12, 0.013, 0.0], 0.001, 15.0, "large_orbium"), // large slow orbium
         ];
 
-        for (genome, mut_rate, pattern_r, _name) in &lenia_creatures {
+        let lenia_bias = (1.0 - (params.mutation_rate / 5.0)).clamp(0.0, 1.0)
+            * (1.0 - (params.predation_factor / 3.0)).clamp(0.0, 1.0);
+        let desired_lenia =
+            ((cluster_count_hint * 0.06) * (0.35 + lenia_bias * 0.85)).round() as usize;
+        let lenia_count = desired_lenia.clamp(1, lenia_creatures.len());
+
+        for (genome, mut_rate, pattern_r, _name) in lenia_creatures
+            .choose_multiple(&mut rng, lenia_count)
+            .copied()
+        {
             let cx = rng.gen_range(20..(w - 20));
             let cy = rng.gen_range(20..(h - 20));
-            let pr = *pattern_r;
+            let pr = pattern_r * cluster_size_scale;
             let ir = pr as i32 + 2;
 
             // Orbium mass profile: a smooth ring with peak at ~r/2
@@ -419,7 +438,7 @@ impl WorldState {
                     if m < 0.01 { continue; }
                     let idx = pixel_idx(cx + dx, cy + dy);
                     stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
-                          idx, m * 0.85, 0.7, *genome, *mut_rate);
+                          idx, m * 0.85, 0.7, genome, mut_rate);
                 }
             }
 
@@ -435,11 +454,11 @@ impl WorldState {
         // ---- PATTERN 8: Lenia blob clusters (proto-creatures) ----
         // Smooth circular blobs with tight Lenia parameters — these provide
         // raw material that can self-organize into creatures over time.
-        let num_blobs = 15;
+        let num_blobs = ((cluster_count_hint * 0.30).round() as i32).max(4);
         for _ in 0..num_blobs {
             let cx = rng.gen_range(0..w);
             let cy = rng.gen_range(0..h);
-            let blob_r = rng.gen_range(8..16) as f32;
+            let blob_r = rng.gen_range(8.0..16.0) * cluster_size_scale;
             // Tight Lenia parameters
             let gene_r: f32 = rng.gen_range(9.0..14.0);
             let gene_mu: f32 = rng.gen_range(0.12..0.20);
@@ -463,6 +482,16 @@ impl WorldState {
             }
         }
 
+        // Match the requested initial fill from presets/UI.
+        let current_total_mass: f32 = mass_data.iter().sum();
+        let requested_total_mass = WORLD_WIDTH as f32 * WORLD_HEIGHT as f32 * target_fill;
+        if current_total_mass > 1e-6 {
+            let scale = (requested_total_mass / current_total_mass).clamp(0.1, 4.0);
+            for m in mass_data.iter_mut() {
+                *m = (*m * scale).clamp(0.0, 1.0);
+            }
+        }
+
         // ======================== Resource Map Heterogeneity ========================
         // Instead of uniform nutrients, create a varied landscape:
         // - Fertile zones (nutrient-rich)
@@ -470,22 +499,25 @@ impl WorldState {
         // - Gradient bands
 
         // Base: slightly reduced uniform nutrients
+        let base_resource = (0.45 + params.resource_feed_rate * 9.0 - params.resource_consumption * 1.8)
+            .clamp(0.2, 0.9);
         for r in resource_data.iter_mut() {
-            *r = 0.7;
+            *r = base_resource;
         }
 
         // Fertile oases (high nutrients)
-        let num_oases = 12;
+        let num_oases = ((cluster_count_hint * 0.20).round() as i32).max(3);
+        let oasis_boost_strength = (0.18 + params.resource_feed_rate * 8.0).clamp(0.15, 0.45);
         for _ in 0..num_oases {
             let cx = rng.gen_range(0..w);
             let cy = rng.gen_range(0..h);
-            let radius = rng.gen_range(20..60) as f32;
+            let radius = rng.gen_range(20.0..60.0) * cluster_size_scale;
             let ir = radius as i32 + 1;
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
                     if dist > radius { continue; }
-                    let boost = 0.3 * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
+                    let boost = oasis_boost_strength * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
                     let idx = pixel_idx(cx + dx, cy + dy);
                     resource_data[idx] = (resource_data[idx] + boost).min(1.0);
                 }
@@ -493,17 +525,18 @@ impl WorldState {
         }
 
         // Desert zones (low nutrients)
-        let num_deserts = 6;
+        let num_deserts = ((cluster_count_hint * 0.10).round() as i32).max(2);
+        let desert_strength = (0.25 + params.resource_consumption * 2.5).clamp(0.2, 0.75);
         for _ in 0..num_deserts {
             let cx = rng.gen_range(0..w);
             let cy = rng.gen_range(0..h);
-            let radius = rng.gen_range(25..50) as f32;
+            let radius = rng.gen_range(25.0..50.0) * cluster_size_scale;
             let ir = radius as i32 + 1;
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
                     if dist > radius { continue; }
-                    let reduction = 0.5 * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
+                    let reduction = desert_strength * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
                     let idx = pixel_idx(cx + dx, cy + dy);
                     resource_data[idx] = (resource_data[idx] - reduction).max(0.05);
                 }

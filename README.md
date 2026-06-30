@@ -93,7 +93,7 @@ cargo run --release -- --load /tmp/evo.snap
 | **R**              | Restart with new random seed              |
 | **H**              | Toggle Extended HUD (shows all parameters)|
 | **1-5 / Tab**      | Change visualization mode (see below)     |
-| **↑ / ↓**          | Increase/Decrease time step (0.1x - 2.0x) |
+| **↑ / ↓**          | Increase/Decrease time step (0.1x - 10.0x) |
 | **← / →**          | Decrease/Increase simulation speed (1-10x)|
 | **[ / ]**          | Decrease/Increase mutation rate (0.1x - 5.0x)|
 | **ESC**            | Quit                                      |
