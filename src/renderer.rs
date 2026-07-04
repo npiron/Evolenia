@@ -99,8 +99,10 @@ impl HudRenderer {
         };
 
         // Larger font for better readability (was 14.0/18.0)
-        let mut text_buf =
-            TextBuffer::new(&mut self.font_system, Metrics::new(font_size, font_size * 1.35));
+        let mut text_buf = TextBuffer::new(
+            &mut self.font_system,
+            Metrics::new(font_size, font_size * 1.35),
+        );
         text_buf.set_size(
             &mut self.font_system,
             Some(config.win_w as f32),
@@ -165,9 +167,7 @@ impl HudRenderer {
 
 /// Build a NES-style retro HUD: black background bar at the bottom with green text.
 /// Returns (text, font_size, color, x_pos, y_pos).
-fn build_nes_hud(
-    config: &HudPrepareConfig<'_>,
-) -> (String, f32, GlyphColor, f32, f32) {
+fn build_nes_hud(config: &HudPrepareConfig<'_>) -> (String, f32, GlyphColor, f32, f32) {
     let nes_green = GlyphColor::rgb(0, 255, 60); // NES phosphor green
     let font_size = 16.0;
 

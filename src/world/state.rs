@@ -58,12 +58,22 @@ impl WorldState {
     }
 
     /// Update per-step uniforms (static defaults).
+    /// Kept for backward-compatible headless runs without SimulationParams.
+    #[allow(dead_code)]
     pub fn update_step_uniforms(&self, queue: &wgpu::Queue) {
         let sim_params = SimParams {
-            width: WORLD_WIDTH, height: WORLD_HEIGHT, frame: self.frame, dt: DT,
-            mutation_rate_mult: 1.0, predation_factor: 1.0,
-            radius_cost_exp: 1.5, agg_mobility: 0.3, starvation_severity: 0.05,
-            _pad1: 0, _pad2: 0, _pad3: 0,
+            width: WORLD_WIDTH,
+            height: WORLD_HEIGHT,
+            frame: self.frame,
+            dt: DT,
+            mutation_rate_mult: 1.0,
+            predation_factor: 1.0,
+            radius_cost_exp: 1.5,
+            agg_mobility: 0.3,
+            starvation_severity: 0.05,
+            _pad1: 0,
+            _pad2: 0,
+            _pad3: 0,
         };
         queue.write_buffer(&self.sim_params_buffer, 0, bytemuck::bytes_of(&sim_params));
         queue.write_buffer(&self.mass_sum, 0, bytemuck::bytes_of(&[0u32; 2]));
@@ -81,28 +91,48 @@ impl WorldState {
             radius_cost_exp: params.radius_cost_exponent,
             agg_mobility: params.agg_mobility_tradeoff,
             starvation_severity: params.starvation_severity,
-            _pad1: 0, _pad2: 0, _pad3: 0,
+            _pad1: 0,
+            _pad2: 0,
+            _pad3: 0,
         };
         queue.write_buffer(&self.sim_params_buffer, 0, bytemuck::bytes_of(&sim_params));
 
         let resource_params = ResourceParams {
-            width: WORLD_WIDTH, height: WORLD_HEIGHT,
+            width: WORLD_WIDTH,
+            height: WORLD_HEIGHT,
             diffusion: params.resource_diffusion,
             feed_rate: params.resource_feed_rate,
             consumption: params.resource_consumption,
-            _pad1: 0, _pad2: 0, _pad3: 0,
+            _pad1: 0,
+            _pad2: 0,
+            _pad3: 0,
         };
-        queue.write_buffer(&self.resource_params_buffer, 0, bytemuck::bytes_of(&resource_params));
+        queue.write_buffer(
+            &self.resource_params_buffer,
+            0,
+            bytemuck::bytes_of(&resource_params),
+        );
 
         let normalize_params = NormalizeParams {
-            width: WORLD_WIDTH, height: WORLD_HEIGHT,
-            target_mass_x1000: (target_total_mass() * params.target_mass_multiplier * 1000.0) as u32,
+            width: WORLD_WIDTH,
+            height: WORLD_HEIGHT,
+            target_mass_x1000: (target_total_mass() * params.target_mass_multiplier * 1000.0)
+                as u32,
             damping_x1000: (params.mass_damping * 1000.0) as u32,
-            enabled: if params.mass_normalization_enabled { 1 } else { 0 },
+            enabled: if params.mass_normalization_enabled {
+                1
+            } else {
+                0
+            },
             dust_floor_x1000: 2,
-            _pad2: 0, _pad3: 0,
+            _pad2: 0,
+            _pad3: 0,
         };
-        queue.write_buffer(&self.normalize_params_buffer, 0, bytemuck::bytes_of(&normalize_params));
+        queue.write_buffer(
+            &self.normalize_params_buffer,
+            0,
+            bytemuck::bytes_of(&normalize_params),
+        );
 
         queue.write_buffer(&self.mass_sum, 0, bytemuck::bytes_of(&[0u32; 2]));
     }
@@ -140,12 +170,22 @@ impl WorldState {
                 let idx = (py * WORLD_WIDTH + px) as usize;
                 let mut dx = px as f32 - cx;
                 let mut dy = py as f32 - cy;
-                if dx > w * 0.5 { dx -= w; }
-                if dx < -w * 0.5 { dx += w; }
-                if dy > h * 0.5 { dy -= h; }
-                if dy < -h * 0.5 { dy += h; }
+                if dx > w * 0.5 {
+                    dx -= w;
+                }
+                if dx < -w * 0.5 {
+                    dx += w;
+                }
+                if dy > h * 0.5 {
+                    dy -= h;
+                }
+                if dy < -h * 0.5 {
+                    dy += h;
+                }
                 let dist = (dx * dx + dy * dy).sqrt();
-                if dist > radius { continue; }
+                if dist > radius {
+                    continue;
+                }
 
                 let falloff = 1.0 - dist / radius;
                 match params.perturbation_type {
@@ -179,12 +219,20 @@ impl WorldState {
 
         log::info!(
             "Perturbation applied: {:?} at ({:.0},{:.0}) r={:.0} i={:.2}",
-            params.perturbation_type, cx, cy, radius, intensity
+            params.perturbation_type,
+            cx,
+            cy,
+            radius,
+            intensity
         );
     }
 
     /// Perform a synchronous GPU readback of all simulation buffers.
-    pub fn readback_snapshot(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Option<BufferSnapshot> {
+    pub fn readback_snapshot(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Option<BufferSnapshot> {
         let n = total_pixels() as usize;
         let n_bytes = (n * std::mem::size_of::<f32>()) as u64;
         let cur = self.cur();
@@ -194,7 +242,13 @@ impl WorldState {
         });
         encoder.copy_buffer_to_buffer(&self.mass[cur], 0, &self.staging_mass, 0, n_bytes);
         encoder.copy_buffer_to_buffer(&self.energy[cur], 0, &self.staging_energy, 0, n_bytes);
-        encoder.copy_buffer_to_buffer(&self.genome_a[cur], 0, &self.staging_genome_a, 0, n_bytes * 4);
+        encoder.copy_buffer_to_buffer(
+            &self.genome_a[cur],
+            0,
+            &self.staging_genome_a,
+            0,
+            n_bytes * 4,
+        );
         encoder.copy_buffer_to_buffer(&self.genome_b[cur], 0, &self.staging_genome_b, 0, n_bytes);
         encoder.copy_buffer_to_buffer(&self.resource_map, 0, &self.staging_resource, 0, n_bytes);
         queue.submit(std::iter::once(encoder.finish()));
@@ -211,7 +265,11 @@ impl WorldState {
             let floats: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
             drop(data);
             buf.unmap();
-            if floats.len() >= count { Some(floats) } else { None }
+            if floats.len() >= count {
+                Some(floats)
+            } else {
+                None
+            }
         };
 
         let mass = read_staging(&self.staging_mass, n)?;
@@ -220,6 +278,12 @@ impl WorldState {
         let genome_b = read_staging(&self.staging_genome_b, n)?;
         let resource = read_staging(&self.staging_resource, n)?;
 
-        Some(BufferSnapshot { mass, energy, genome_a, genome_b, resource })
+        Some(BufferSnapshot {
+            mass,
+            energy,
+            genome_a,
+            genome_b,
+            resource,
+        })
     }
 }

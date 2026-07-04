@@ -45,13 +45,29 @@ pub fn render_right_analysis_panel(ctx: &egui::Context, lab: &mut LabState) {
                         stat_row(ui, "Avg Energy", &format!("{:.4}", last.avg_energy));
                         stat_row(ui, "Entropy", &format!("{:.2} bits", last.entropy));
                         stat_row(ui, "Species", &format!("{}", last.species));
-                        stat_row(ui, "Live Pixels", &format!("{} ({:.1}%)", last.live_pixels, last.live_fraction * 100.0));
-                        stat_row(ui, "Predators", &format!("{:.1}%", last.predator_fraction * 100.0));
+                        stat_row(
+                            ui,
+                            "Live Pixels",
+                            &format!("{} ({:.1}%)", last.live_pixels, last.live_fraction * 100.0),
+                        );
+                        stat_row(
+                            ui,
+                            "Predators",
+                            &format!("{:.1}%", last.predator_fraction * 100.0),
+                        );
                         stat_row(ui, "Avg Resource", &format!("{:.3}", last.avg_resource));
                         stat_row(ui, "Mass StdDev", &format!("{:.4}", last.mass_std_dev));
                         stat_row(ui, "Prey %", &format!("{:.1}%", last.prey_fraction * 100.0));
-                        stat_row(ui, "Opportunist %", &format!("{:.1}%", last.opportunist_fraction * 100.0));
-                        stat_row(ui, "Eff. Diversity", &format!("{:.2}", last.effective_diversity));
+                        stat_row(
+                            ui,
+                            "Opportunist %",
+                            &format!("{:.1}%", last.opportunist_fraction * 100.0),
+                        );
+                        stat_row(
+                            ui,
+                            "Eff. Diversity",
+                            &format!("{:.2}", last.effective_diversity),
+                        );
                         stat_row(ui, "Genome Var", &format!("{:.4}", last.genome_variance));
                         stat_row(ui, "Total Energy", &format!("{:.0}", last.total_energy));
                         stat_row(ui, "Energy Flux", &format!("{:.4}", last.energy_flux));
@@ -61,16 +77,32 @@ pub fn render_right_analysis_panel(ctx: &egui::Context, lab: &mut LabState) {
 
             // Time-series plots
             egui::ScrollArea::vertical().show(ui, |ui| {
-                render_plot(ui, "Total Mass", &lab.metrics_history, |m| m.total_mass as f64);
-                render_plot(ui, "Avg Energy", &lab.metrics_history, |m| m.avg_energy as f64);
-                render_plot(ui, "Genetic Entropy", &lab.metrics_history, |m| m.entropy as f64);
-                render_plot(ui, "Species Count", &lab.metrics_history, |m| m.species as f64);
-                render_plot(ui, "Live Pixels", &lab.metrics_history, |m| m.live_pixels as f64);
+                render_plot(ui, "Total Mass", &lab.metrics_history, |m| {
+                    m.total_mass as f64
+                });
+                render_plot(ui, "Avg Energy", &lab.metrics_history, |m| {
+                    m.avg_energy as f64
+                });
+                render_plot(ui, "Genetic Entropy", &lab.metrics_history, |m| {
+                    m.entropy as f64
+                });
+                render_plot(ui, "Species Count", &lab.metrics_history, |m| {
+                    m.species as f64
+                });
+                render_plot(ui, "Live Pixels", &lab.metrics_history, |m| {
+                    m.live_pixels as f64
+                });
                 render_plot(ui, "FPS", &lab.metrics_history, |m| m.fps as f64);
 
-                render_plot(ui, "Effective Diversity", &lab.metrics_history, |m| m.effective_diversity as f64);
-                render_plot(ui, "Energy Flux", &lab.metrics_history, |m| m.energy_flux as f64);
-                render_plot(ui, "Genome Variance", &lab.metrics_history, |m| m.genome_variance as f64);
+                render_plot(ui, "Effective Diversity", &lab.metrics_history, |m| {
+                    m.effective_diversity as f64
+                });
+                render_plot(ui, "Energy Flux", &lab.metrics_history, |m| {
+                    m.energy_flux as f64
+                });
+                render_plot(ui, "Genome Variance", &lab.metrics_history, |m| {
+                    m.genome_variance as f64
+                });
 
                 // Comparison section
                 if !lab.completed_runs.is_empty() {

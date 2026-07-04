@@ -156,14 +156,14 @@ mod genome_tests {
 
     #[test]
     fn default_genome_has_valid_sigma() {
-        // The default genome in world.rs must have sigma > 0
+        // The default genome in world/init.rs must have sigma > 0
         // This is the ACTUAL initialization check
 
-        // Default genome from world.rs: [10.0, 0.15, 0.017, 0.0]
-        let default_sigma = 0.017f32; // from world.rs line ~147
+        // Default genome from world/init.rs: [10.0, 0.15, 0.017, 0.0]
+        let default_sigma = 0.017f32; // from world/init.rs line ~74
         assert!(
             default_sigma > 0.0,
-            "Default sigma in world.rs must be > 0, found: {}",
+            "Default sigma in world/init.rs must be > 0, found: {}",
             default_sigma
         );
     }
@@ -1323,7 +1323,6 @@ mod integration_tests {
     fn preset_load_is_valid() {
         // Smoke test: load each preset and verify it produces a valid
         // SimulationParams without crashing.
-        use crate::lab_ui;
 
         let presets = [
             "default",
@@ -1338,7 +1337,7 @@ mod integration_tests {
         ];
 
         for preset_name in &presets {
-            let params = lab_ui::load_preset(preset_name);
+            let params = crate::lab_ui::presets::load_preset(preset_name);
             assert!(
                 params.is_some(),
                 "Preset '{}' should load successfully",
@@ -1373,6 +1372,7 @@ mod integration_tests {
     #[test]
     #[ignore]
     fn headless_100_frames_no_nan() {
+        use crate::config::SimulationParams;
         use crate::headless::{run_headless, HeadlessConfig};
 
         let config = HeadlessConfig {
@@ -1381,6 +1381,7 @@ mod integration_tests {
             save_state_path: None,
             progress_interval: 0, // silent
             seed: Some(42),
+            sim_params: SimulationParams::default(),
         };
 
         let result = run_headless(&config);
@@ -1395,6 +1396,7 @@ mod integration_tests {
     #[test]
     #[ignore]
     fn headless_multiple_seeds_no_crash() {
+        use crate::config::SimulationParams;
         use crate::headless::{run_headless, HeadlessConfig};
 
         for seed in [1u64, 42, 999, 12345] {
@@ -1404,6 +1406,7 @@ mod integration_tests {
                 save_state_path: None,
                 progress_interval: 0,
                 seed: Some(seed),
+                sim_params: SimulationParams::default(),
             };
             let result = run_headless(&config);
             assert!(

@@ -16,6 +16,7 @@ pub struct HeadlessConfig {
     pub save_state_path: Option<String>,
     pub progress_interval: u32,
     pub seed: Option<u64>,
+    pub sim_params: SimulationParams,
 }
 
 impl Default for HeadlessConfig {
@@ -26,6 +27,7 @@ impl Default for HeadlessConfig {
             save_state_path: None,
             progress_interval: 5000,
             seed: None,
+            sim_params: SimulationParams::default(),
         }
     }
 }
@@ -58,7 +60,7 @@ pub fn run_headless(config: &HeadlessConfig) -> Result<(), String> {
     ))
     .map_err(|e| format!("Failed to create headless device: {e}"))?;
 
-    let mut world = WorldState::new_with_config(&device, config.seed, &SimulationParams::default());
+    let mut world = WorldState::new_with_config(&device, config.seed, &config.sim_params);
     if let Some(path) = &config.load_state_path {
         let snap = state_io::load_snapshot(path)
             .map_err(|e| format!("Failed to load state {}: {}", path, e))?;
@@ -85,7 +87,7 @@ pub fn run_headless(config: &HeadlessConfig) -> Result<(), String> {
     let mut last_report_frame = 0u32;
 
     for step in 0..config.frames {
-        world.update_step_uniforms(&queue);
+        world.update_step_uniforms_dynamic(&queue, &config.sim_params);
         let cur = world.cur();
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {

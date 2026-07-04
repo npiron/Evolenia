@@ -6,8 +6,8 @@
 
 EvoLenia is an artificial life simulation where evolution emerges from physical laws, not from hand-coded rules. Each pixel is an autonomous organism with its own **5-gene genome**, creating a colorful ecosystem where species, predation, and adaptation emerge spontaneously.
 
-![EvoLenia Simulation](docs/screenshot.png)
-*Real-time evolution: Each color represents a different genetic lineage*
+> 💡 *Real-time evolution: Each color represents a different genetic lineage*  
+> *Screenshots available in the [GitHub repository](https://github.com/npiron/Evolenia)*
 
 ---
 
@@ -173,14 +173,35 @@ frame,600,target_mass,157286.4,entropy,2.512,species,8
 
 ```
 src/
-├── main.rs              # WGPU setup, event loop, UI
-├── world.rs             # WorldState (GPU buffers, ping-pong)
+├── main.rs                       # Entry point, CLI parsing
+├── app/                          # Application: window, input, rendering, theme
+│   ├── mod.rs                    # AppState, winit event loop
+│   ├── gpu.rs                    # GPU device/surface init
+│   ├── input.rs                  # Keyboard handling
+│   ├── render.rs                 # Frame rendering + simulation encoding
+│   └── theme.rs                  # egui theme (macOS-inspired light)
+├── world/                        # World state & GPU buffer management
+│   ├── constants.rs              # Grid size, DT, target fill
+│   ├── init.rs                   # WorldState creation + init patterns
+│   ├── state.rs                  # Runtime methods (snapshot, swap, uniforms, perturbations)
+│   └── types.rs                  # GPU uniform structs
+├── pipeline.rs                   # GPU pipeline + bind group creation
+├── camera.rs                     # Camera pan/zoom
+├── config.rs                     # SimulationParams, TOML config
+├── renderer.rs                   # HUD text rendering (glyphon)
+├── headless.rs                   # Headless batch runner
+├── lab.rs                        # Research Lab state & metrics
+├── lab_ui/                       # egui UI panels
+│   ├── dashboard.rs, left_panel.rs, analysis.rs, menu.rs
+│   ├── overlay.rs, logs.rs, presets.rs, status.rs
+├── metrics.rs                    # Diagnostics (entropy, species, trophic)
+├── state_io.rs                   # Binary snapshot save/load
 └── shaders/
     ├── compute_velocity.wgsl      # Calculates mass flow from gradients
     ├── compute_evolution.wgsl     # Lenia + metabolism + advection + DNA + mutations
     ├── compute_resources.wgsl     # Gray-Scott reaction-diffusion for nutrients
     ├── normalize_mass.wgsl        # Conservation law enforcement (sum + normalize)
-    └── render.wgsl                # Genome-to-color mapping
+    └── render.wgsl                # 9 visualization modes
 ```
 
 **Pipeline** (60 FPS):
@@ -194,7 +215,7 @@ src/
 
 ## 🔬 Experimental Parameters
 
-Want to tweak the simulation? Edit [src/world.rs](src/world.rs):
+Want to tweak the simulation? Edit [src/world/constants.rs](src/world/constants.rs):
 
 ```rust
 pub const WORLD_WIDTH: u32 = 1024;    // Grid size (power of 2)
@@ -213,7 +234,7 @@ Or shader constants in [src/shaders/compute_evolution.wgsl](src/shaders/compute_
 ## 🐛 Troubleshooting
 
 **Low FPS (<30)?**
-- Reduce `WORLD_WIDTH/HEIGHT` to 512×512 in `world.rs`
+- Reduce `WORLD_WIDTH/HEIGHT` to 512×512 in `src/world/constants.rs`
 - Check GPU drivers are up-to-date
 - Ensure you're running with `--release` flag
 

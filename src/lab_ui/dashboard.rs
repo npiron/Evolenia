@@ -4,7 +4,11 @@
 
 use crate::lab::LabState;
 
-pub fn render_dashboard(ui: &mut egui::Ui, params: &mut crate::config::SimulationParams, lab: &mut LabState) {
+pub fn render_dashboard(
+    ui: &mut egui::Ui,
+    params: &mut crate::config::SimulationParams,
+    lab: &mut LabState,
+) {
     let frame = lab.metrics_history.last().map_or(0, |m| m.frame);
     let fps = lab.metrics_history.last().map_or(0.0, |m| m.fps);
     let species = lab.metrics_history.last().map_or(0, |m| m.species);
@@ -77,11 +81,7 @@ pub fn render_dashboard(ui: &mut egui::Ui, params: &mut crate::config::Simulatio
                         .fill(egui::Color32::from_rgb(220, 100, 60)),
                 );
                 let (pred_status, pred_color) = predator_context(lab);
-                ui.label(
-                    egui::RichText::new(pred_status)
-                        .size(9.0)
-                        .color(pred_color),
-                );
+                ui.label(egui::RichText::new(pred_status).size(9.0).color(pred_color));
             });
 
             ui.add_space(8.0);
@@ -160,14 +160,22 @@ pub fn predator_context(lab: &LabState) -> (&'static str, egui::Color32) {
         return ("collecting data…", egui::Color32::from_rgb(140, 140, 155));
     }
 
-    let recent: Vec<f32> = history.iter().rev().take(20).map(|m| m.predator_fraction).collect();
+    let recent: Vec<f32> = history
+        .iter()
+        .rev()
+        .take(20)
+        .map(|m| m.predator_fraction)
+        .collect();
     let current = recent[0];
     let avg_20 = recent.iter().sum::<f32>() / recent.len() as f32;
 
     if current < 0.001 && avg_20 < 0.001 {
         ("no predators yet", egui::Color32::from_rgb(140, 140, 155))
     } else if current < 0.01 && avg_20 > 0.02 {
-        ("⚠ population collapsed", egui::Color32::from_rgb(220, 140, 30))
+        (
+            "⚠ population collapsed",
+            egui::Color32::from_rgb(220, 140, 30),
+        )
     } else if current < 0.01 {
         ("near extinction", egui::Color32::from_rgb(200, 150, 60))
     } else if recent.len() >= 8 {

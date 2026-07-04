@@ -506,38 +506,112 @@ impl LabState {
             if fields.len() < 17 {
                 continue;
             }
-            let (fi_avg_e, fi_ent, fi_sp, fi_lp, fi_lf, fi_pf, fi_ar, fi_msd,
-                 fi_r, fi_mu, fi_sig, fi_agg, fi_mut, fi_prey, fi_opp, fi_div, fi_var, fi_te, fi_ef) =
-            if is_new_format {
-                (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
+            let (
+                fi_avg_e,
+                fi_ent,
+                fi_sp,
+                fi_lp,
+                fi_lf,
+                fi_pf,
+                fi_ar,
+                fi_msd,
+                fi_r,
+                fi_mu,
+                fi_sig,
+                fi_agg,
+                fi_mut,
+                fi_prey,
+                fi_opp,
+                fi_div,
+                fi_var,
+                fi_te,
+                fi_ef,
+            ) = if is_new_format {
+                (
+                    5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                )
             } else {
-                (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22)
+                (
+                    4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+                )
             };
             let record = MetricsRecord {
                 frame: fields[0].parse().unwrap_or(0),
                 time_ms: fields[1].parse().unwrap_or(0.0),
                 fps: fields[2].parse().unwrap_or(0.0),
                 total_mass: fields[3].parse().unwrap_or(0.0),
-                mass_drift_pct: if is_new_format { fields.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.0) } else { 0.0 },
-                avg_energy: fields.get(fi_avg_e).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                entropy: fields.get(fi_ent).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                mass_drift_pct: if is_new_format {
+                    fields.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.0)
+                } else {
+                    0.0
+                },
+                avg_energy: fields
+                    .get(fi_avg_e)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                entropy: fields
+                    .get(fi_ent)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
                 species: fields.get(fi_sp).and_then(|s| s.parse().ok()).unwrap_or(0),
                 live_pixels: fields.get(fi_lp).and_then(|s| s.parse().ok()).unwrap_or(0),
-                live_fraction: fields.get(fi_lf).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                predator_fraction: fields.get(fi_pf).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                avg_resource: fields.get(fi_ar).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                mass_std_dev: fields.get(fi_msd).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                live_fraction: fields
+                    .get(fi_lf)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                predator_fraction: fields
+                    .get(fi_pf)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                avg_resource: fields
+                    .get(fi_ar)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                mass_std_dev: fields
+                    .get(fi_msd)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
                 avg_radius: fields.get(fi_r).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                avg_mu: fields.get(fi_mu).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                avg_sigma: fields.get(fi_sig).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                avg_aggressivity: fields.get(fi_agg).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                avg_mutation_rate: fields.get(fi_mut).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                prey_fraction: fields.get(fi_prey).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                opportunist_fraction: fields.get(fi_opp).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                effective_diversity: fields.get(fi_div).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                genome_variance: fields.get(fi_var).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                total_energy: fields.get(fi_te).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                energy_flux: fields.get(fi_ef).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                avg_mu: fields
+                    .get(fi_mu)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                avg_sigma: fields
+                    .get(fi_sig)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                avg_aggressivity: fields
+                    .get(fi_agg)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                avg_mutation_rate: fields
+                    .get(fi_mut)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                prey_fraction: fields
+                    .get(fi_prey)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                opportunist_fraction: fields
+                    .get(fi_opp)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                effective_diversity: fields
+                    .get(fi_div)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                genome_variance: fields
+                    .get(fi_var)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                total_energy: fields
+                    .get(fi_te)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
+                energy_flux: fields
+                    .get(fi_ef)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0.0),
             };
             records.push(record);
         }

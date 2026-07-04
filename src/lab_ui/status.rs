@@ -15,7 +15,9 @@ pub fn render_status_bar(ctx: &egui::Context, lab: &mut LabState) {
                     .corner_radius(egui::CornerRadius::same(4))
                     .inner_margin(egui::Margin::symmetric(12, 6))
                     .show(ui, |ui| {
-                        ui.label(egui::RichText::new(msg).color(egui::Color32::from_rgb(20, 80, 20)));
+                        ui.label(
+                            egui::RichText::new(msg).color(egui::Color32::from_rgb(20, 80, 20)),
+                        );
                     });
             });
     }

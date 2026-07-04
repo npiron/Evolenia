@@ -17,7 +17,7 @@ pub struct SimDiagnostics {
     pub live_pixels: u32,
     pub live_fraction: f32,
     pub max_mass: f32,
-    pub avg_mass_live: f32, // average mass over live pixels only
+    pub avg_mass_live: f32,  // average mass over live pixels only
     pub mass_drift_pct: f32, // deviation from target: (actual - target) / target * 100
 
     // Energy

@@ -25,7 +25,7 @@ Sur **Apple M1 Pro** (1024×1024, mode release) :
 
 ### 1. Réduire la Résolution de la Grille
 
-**Modification** : [src/world.rs](src/world.rs#L13-L14)
+**Modification** : [src/world/constants.rs](src/world/constants.rs)
 ```rust
 // De 1024×1024 (1M pixels) à 512×512 (256K pixels) = 4× plus rapide
 pub const WORLD_WIDTH: u32 = 512;
@@ -52,7 +52,7 @@ let max_r = 6;  // 2.1× moins de samples
 
 ### 3. Augmenter DT (Pas de Temps)
 
-**Modification** : [src/world.rs](src/world.rs#L17)
+**Modification** : [src/world/constants.rs](src/world/constants.rs)
 ```rust
 // De DT = 0.05 à DT = 0.1 = simuler 2× plus vite
 pub const DT: f32 = 0.1;
@@ -110,7 +110,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>,
 
 Au lieu de calculer `kernel_weight()` à chaque frame, pré-calculer une lookup table.
 
-**Setup** : [src/world.rs](src/world.rs)
+**Setup** : [src/world/constants.rs](src/world/constants.rs)
 ```rust
 // Créer un buffer de kernels pré-calculés
 pub kernel_lut: wgpu::Buffer,  // 3 kernels × 100 samples = 1.2 KB
@@ -152,7 +152,7 @@ for _ in 0..2 {  // 2 simulation steps per render
 
 Les GPU ont un cache texture optimisé. Convertir `mass`, `genome_a` en textures RGBA.
 
-**Setup** : [src/world.rs](src/world.rs)
+**Setup** : [src/world/constants.rs](src/world/constants.rs)
 ```rust
 pub mass_texture: wgpu::Texture,  // Format::R32Float
 pub genome_texture: wgpu::Texture, // Format::Rgba32Float

@@ -49,10 +49,16 @@ pub async fn init_gpu(
         .copied()
         .unwrap_or(surface_caps.formats[0]);
 
-    let present_mode = if surface_caps.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+    let present_mode = if surface_caps
+        .present_modes
+        .contains(&wgpu::PresentMode::Mailbox)
+    {
         log::info!("Present mode: Mailbox (uncapped FPS)");
         wgpu::PresentMode::Mailbox
-    } else if surface_caps.present_modes.contains(&wgpu::PresentMode::Immediate) {
+    } else if surface_caps
+        .present_modes
+        .contains(&wgpu::PresentMode::Immediate)
+    {
         log::info!("Present mode: Immediate (uncapped FPS)");
         wgpu::PresentMode::Immediate
     } else {

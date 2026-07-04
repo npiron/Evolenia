@@ -69,16 +69,16 @@ Publishing results from EvoLenia? Please:
 ## 📚 Areas for Contribution
 
 ### High Priority
-- [ ] **Metrics export** — Automatic CSV logging of genetic entropy, species count
-- [ ] **State save/load** — Serialize WorldState to JSON for reproducibility
+- [x] **Metrics export** — Automatic CSV logging of genetic entropy, species count
+- [x] **State save/load** — Binary snapshot save/load with magic header
 - [ ] **WebGPU build** — Port to run in browser via wasm-bindgen
-- [ ] **Unit tests** — Test conservation laws, genome segregation, PRNG
+- [x] **Unit tests** — Test conservation laws, genome segregation, PRNG (55 tests)
 
 ### Medium Priority
 - [ ] **Multi-GPU support** — Distribute computation across GPUs
 - [ ] **Phylogenetic tree** — Visualize species lineages over time
 - [ ] **Video export** — Render time-lapse videos (ffmpeg integration)
-- [ ] **Configuration files** — TOML/YAML for simulation parameters
+- [x] **Configuration files** — TOML for simulation parameters
 
 ### Advanced
 - [ ] **3D Lenia** — Extend to volumetric cellular automata

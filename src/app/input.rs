@@ -35,14 +35,21 @@ pub fn handle_keyboard(
         }
         Key::Named(NamedKey::F1) if pressed => {
             state.lab.show_lab_ui = !state.lab.show_lab_ui;
-            log::info!("Lab UI: {}", if state.lab.show_lab_ui { "ON" } else { "OFF" });
+            log::info!(
+                "Lab UI: {}",
+                if state.lab.show_lab_ui { "ON" } else { "OFF" }
+            );
         }
         Key::Named(NamedKey::F9) if pressed => {
             state.lab.show_analysis_panel = !state.lab.show_analysis_panel;
         }
         Key::Named(NamedKey::F12) if pressed => {
             state.lab.screenshot_requested = true;
-            state.lab.log_event(state.world.frame, "SCREENSHOT", "Screenshot requested (F12)");
+            state.lab.log_event(
+                state.world.frame,
+                "SCREENSHOT",
+                "Screenshot requested (F12)",
+            );
         }
         _ => {}
     }
@@ -56,8 +63,13 @@ pub fn handle_keyboard(
         Key::Named(NamedKey::Space) if pressed => {
             state.sim_params.paused = !state.sim_params.paused;
             state.lab.log_event(
-                state.world.frame, "CONTROL",
-                if state.sim_params.paused { "Paused" } else { "Resumed" },
+                state.world.frame,
+                "CONTROL",
+                if state.sim_params.paused {
+                    "Paused"
+                } else {
+                    "Resumed"
+                },
             );
         }
 
@@ -72,9 +84,12 @@ pub fn handle_keyboard(
                 state.lab.restart_requested = true;
             }
             "h" | "H" if pressed => {
-                state.lab.hud_mode = if state.lab.hud_mode == 0 { 2 } else { 0 };
+                state.lab.hud_mode = (state.lab.hud_mode + 1) % 3;
                 let mode_name = match state.lab.hud_mode {
-                    0 => "off", 2 => "NES", _ => "?",
+                    0 => "off",
+                    1 => "minimal",
+                    2 => "NES",
+                    _ => "?",
                 };
                 log::info!("HUD mode: {}", mode_name);
             }
@@ -91,7 +106,9 @@ pub fn handle_keyboard(
                     wgpu::PresentMode::Immediate
                 };
                 state.surface_config.present_mode = mode;
-                state.surface.configure(&state.device, &state.surface_config);
+                state
+                    .surface
+                    .configure(&state.device, &state.surface_config);
             }
             "[" if pressed => {
                 state.sim_params.mutation_rate = (state.sim_params.mutation_rate * 0.9).max(0.1);

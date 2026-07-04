@@ -57,13 +57,33 @@ pub fn render_minimal_overlay(ctx: &egui::Context, params: &SimulationParams, la
 
                     // ── Row 2: Key metrics ──
                     ui.horizontal(|ui| {
-                        hud_metric(ui, "🧬 Espèces", &format!("{}", species), egui::Color32::from_rgb(200, 160, 255));
+                        hud_metric(
+                            ui,
+                            "🧬 Espèces",
+                            &format!("{}", species),
+                            egui::Color32::from_rgb(200, 160, 255),
+                        );
                         ui.add_space(16.0);
-                        hud_metric(ui, "💚 Vie", &format!("{:.0}%", live_frac), egui::Color32::from_rgb(80, 255, 120));
+                        hud_metric(
+                            ui,
+                            "💚 Vie",
+                            &format!("{:.0}%", live_frac),
+                            egui::Color32::from_rgb(80, 255, 120),
+                        );
                         ui.add_space(16.0);
-                        hud_metric(ui, "🦁 Prédateurs", &format!("{:.0}%", predator_frac), egui::Color32::from_rgb(255, 160, 70));
+                        hud_metric(
+                            ui,
+                            "🦁 Prédateurs",
+                            &format!("{:.0}%", predator_frac),
+                            egui::Color32::from_rgb(255, 160, 70),
+                        );
                         ui.add_space(16.0);
-                        hud_metric(ui, "🐑 Proies", &format!("{:.0}%", prey_frac), egui::Color32::from_rgb(120, 220, 255));
+                        hud_metric(
+                            ui,
+                            "🐑 Proies",
+                            &format!("{:.0}%", prey_frac),
+                            egui::Color32::from_rgb(120, 220, 255),
+                        );
                     });
 
                     ui.add_space(6.0);

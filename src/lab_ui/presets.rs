@@ -435,7 +435,14 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
 
 /// Get unique categories from the catalog.
 pub fn preset_categories() -> Vec<&'static str> {
-    vec!["Autonomous", "Predation", "Explosive", "Stable", "Special", "Experimental"]
+    vec![
+        "Autonomous",
+        "Predation",
+        "Explosive",
+        "Stable",
+        "Special",
+        "Experimental",
+    ]
 }
 
 // ======================== Preset Save/Load ========================

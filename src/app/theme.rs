@@ -19,11 +19,14 @@ pub fn apply_default_theme(egui_ctx: &egui::Context) {
     visuals.panel_fill = egui::Color32::from_rgb(246, 246, 248);
     visuals.extreme_bg_color = egui::Color32::from_rgb(220, 220, 226);
     visuals.faint_bg_color = egui::Color32::from_rgb(250, 250, 252);
-    visuals.window_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgba_premultiplied(0, 0, 0, 30));
+    visuals.window_stroke =
+        egui::Stroke::new(1.0, egui::Color32::from_rgba_premultiplied(0, 0, 0, 30));
     visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(232, 232, 237);
-    visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(60, 60, 70));
+    visuals.widgets.noninteractive.fg_stroke =
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(60, 60, 70));
     visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(220, 220, 226);
-    visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 40, 50));
+    visuals.widgets.inactive.fg_stroke =
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(40, 40, 50));
     visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(200, 220, 245);
     visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(0, 80, 180));
     visuals.widgets.active.bg_fill = egui::Color32::from_rgb(0, 122, 255);

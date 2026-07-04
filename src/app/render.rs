@@ -21,12 +21,17 @@ pub fn redraw(state: &mut AppState) {
 
     // FPS (exponential moving average)
     let now = Instant::now();
-    let dt = now.duration_since(state.last_redraw).as_secs_f32().max(0.0001);
+    let dt = now
+        .duration_since(state.last_redraw)
+        .as_secs_f32()
+        .max(0.0001);
     state.last_redraw = now;
     state.fps = state.fps * 0.95 + (1.0 / dt) * 0.05;
 
     // Camera movement from held keys
-    state.camera.apply_pan(state.keys.w, state.keys.s, state.keys.a, state.keys.d);
+    state
+        .camera
+        .apply_pan(state.keys.w, state.keys.s, state.keys.a, state.keys.d);
     state.camera.apply_zoom_keys(state.keys.e, state.keys.q);
 
     // Upload camera uniform
@@ -38,7 +43,8 @@ pub fn redraw(state: &mut AppState) {
 
     // Upload render params
     let render_params = RenderParams {
-        width: WORLD_WIDTH, height: WORLD_HEIGHT,
+        width: WORLD_WIDTH,
+        height: WORLD_HEIGHT,
         visualization_mode: state.sim_params.visualization_mode,
         show_legend: if state.lab.show_legend { 1 } else { 0 },
         time: state.world.frame as f32 * state.sim_params.time_step,
@@ -55,27 +61,36 @@ pub fn redraw(state: &mut AppState) {
     let full_output = state.egui_ctx.run(raw_input, |ctx| {
         lab_ui::render_lab_ui(ctx, &mut state.sim_params, &mut state.lab);
     });
-    state.egui_winit_state.handle_platform_output(&state.window, full_output.platform_output);
+    state
+        .egui_winit_state
+        .handle_platform_output(&state.window, full_output.platform_output);
 
     // ---- Handle lab actions ----
     if state.lab.restart_requested {
         let seed = state.sim_params.effective_seed();
         state.world = WorldState::new_with_config(&state.device, seed, &state.sim_params);
-        state.pipelines = create_pipelines(&state.device, &state.world, state.surface_config.format);
+        state.pipelines =
+            create_pipelines(&state.device, &state.world, state.surface_config.format);
         state.lab.restart_requested = false;
         state.last_diag = None;
         state.lab.metrics_history.clear();
         state.lab.events.clear();
-        state.lab.log_event(state.world.frame, "RESTART", "Simulation restarted");
+        state
+            .lab
+            .log_event(state.world.frame, "RESTART", "Simulation restarted");
         if let Some(s) = seed {
-            state.lab.log_event(state.world.frame, "SEED", &format!("Seed: {}", s));
+            state
+                .lab
+                .log_event(state.world.frame, "SEED", &format!("Seed: {}", s));
         }
         log::info!("Simulation restarted (seed: {:?})", seed);
     }
 
     // ---- Handle perturbation ----
     if state.sim_params.perturbation_active {
-        state.world.apply_perturbation(&state.device, &state.queue, &state.sim_params);
+        state
+            .world
+            .apply_perturbation(&state.device, &state.queue, &state.sim_params);
         state.sim_params.perturbation_active = false;
         log::info!(
             "Perturbation applied: {} intensity={:.2} radius={:.2}",
@@ -83,7 +98,10 @@ pub fn redraw(state: &mut AppState) {
             state.sim_params.perturbation_intensity,
             state.sim_params.perturbation_radius,
         );
-        state.lab.set_status(format!("Perturbation '{}' applied", state.sim_params.perturbation_type.name()));
+        state.lab.set_status(format!(
+            "Perturbation '{}' applied",
+            state.sim_params.perturbation_type.name()
+        ));
     }
 
     state.diag_interval = state.lab.metrics_sample_interval.max(1);
@@ -97,7 +115,8 @@ pub fn redraw(state: &mut AppState) {
             params: &state.sim_params,
             frame: state.world.frame,
             fps: state.fps,
-            win_w, win_h,
+            win_w,
+            win_h,
             hud_mode: state.lab.hud_mode,
             nes_species: last_record.map_or(0, |m| m.species),
             nes_total_mass: last_record.map_or(0.0, |m| m.total_mass),
@@ -117,44 +136,68 @@ pub fn redraw(state: &mut AppState) {
     if !state.sim_params.paused {
         let steps = state.sim_params.simulation_speed;
         for _ in 0..steps {
-            state.world.update_step_uniforms_dynamic(&state.queue, &state.sim_params);
+            state
+                .world
+                .update_step_uniforms_dynamic(&state.queue, &state.sim_params);
             let cur = state.world.cur();
-            let mut sim_encoder = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("sim_encoder"),
-            });
+            let mut sim_encoder =
+                state
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("sim_encoder"),
+                    });
             encode_simulation_passes(
-                &mut sim_encoder, &state.pipelines, cur,
-                dispatch_x, dispatch_y, dispatch_linear,
+                &mut sim_encoder,
+                &state.pipelines,
+                cur,
+                dispatch_x,
+                dispatch_y,
+                dispatch_linear,
             );
             state.queue.submit(std::iter::once(sim_encoder.finish()));
             state.world.swap();
         }
     } else if state.lab.step_requested {
-        state.world.update_step_uniforms_dynamic(&state.queue, &state.sim_params);
+        state
+            .world
+            .update_step_uniforms_dynamic(&state.queue, &state.sim_params);
         let cur = state.world.cur();
-        let mut sim_encoder = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("step_encoder"),
-        });
+        let mut sim_encoder =
+            state
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("step_encoder"),
+                });
         encode_simulation_passes(
-            &mut sim_encoder, &state.pipelines, cur,
-            dispatch_x, dispatch_y, dispatch_linear,
+            &mut sim_encoder,
+            &state.pipelines,
+            cur,
+            dispatch_x,
+            dispatch_y,
+            dispatch_linear,
         );
         state.queue.submit(std::iter::once(sim_encoder.finish()));
         state.world.swap();
         state.lab.step_requested = false;
-        state.lab.log_event(state.world.frame, "CONTROL", "Single step");
+        state
+            .lab
+            .log_event(state.world.frame, "CONTROL", "Single step");
     }
 
     // ---- Render pass ----
     let render_cur = 1 - state.world.cur();
-    let mut encoder = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("render_encoder"),
-    });
+    let mut encoder = state
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("render_encoder"),
+        });
 
     let output = match state.surface.get_current_texture() {
         Ok(t) => t,
         Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-            state.surface.configure(&state.device, &state.surface_config);
+            state
+                .surface
+                .configure(&state.device, &state.surface_config);
             return;
         }
         Err(e) => {
@@ -163,7 +206,9 @@ pub fn redraw(state: &mut AppState) {
         }
     };
 
-    let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let view = output
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
     let msaa_view = state.msaa_view.as_ref().expect("MSAA view not initialized");
 
     {
@@ -173,7 +218,12 @@ pub fn redraw(state: &mut AppState) {
                 view: msaa_view,
                 resolve_target: Some(&view),
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.015, g: 0.015, b: 0.04, a: 1.0 }),
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.015,
+                        g: 0.015,
+                        b: 0.04,
+                        a: 1.0,
+                    }),
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -193,7 +243,10 @@ pub fn redraw(state: &mut AppState) {
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
                 resolve_target: None,
-                ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
             })],
             depth_stencil_attachment: None,
             timestamp_writes: None,
@@ -222,8 +275,10 @@ pub fn redraw(state: &mut AppState) {
 
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
-                texture: &output.texture, mip_level: 0,
-                origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All,
+                texture: &output.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
             wgpu::TexelCopyBufferInfo {
                 buffer: &staging,
@@ -233,7 +288,11 @@ pub fn redraw(state: &mut AppState) {
                     rows_per_image: Some(win_h),
                 },
             },
-            wgpu::Extent3d { width: win_w, height: win_h, depth_or_array_layers: 1 },
+            wgpu::Extent3d {
+                width: win_w,
+                height: win_h,
+                depth_or_array_layers: 1,
+            },
         );
         screenshot_staging = Some(staging);
     }
@@ -241,10 +300,14 @@ pub fn redraw(state: &mut AppState) {
     state.queue.submit(std::iter::once(encoder.finish()));
 
     // ---- egui render pass ----
-    let paint_jobs = state.egui_ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
+    let paint_jobs = state
+        .egui_ctx
+        .tessellate(full_output.shapes, full_output.pixels_per_point);
 
     for (id, image_delta) in &full_output.textures_delta.set {
-        state.egui_renderer.update_texture(&state.device, &state.queue, *id, image_delta);
+        state
+            .egui_renderer
+            .update_texture(&state.device, &state.queue, *id, image_delta);
     }
 
     let screen_descriptor = egui_wgpu::ScreenDescriptor {
@@ -252,15 +315,27 @@ pub fn redraw(state: &mut AppState) {
         pixels_per_point: full_output.pixels_per_point,
     };
 
-    let mut egui_encoder = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("egui_encoder"),
-    });
+    let mut egui_encoder = state
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("egui_encoder"),
+        });
 
     state.egui_renderer.update_buffers(
-        &state.device, &state.queue, &mut egui_encoder, &paint_jobs, &screen_descriptor,
+        &state.device,
+        &state.queue,
+        &mut egui_encoder,
+        &paint_jobs,
+        &screen_descriptor,
     );
 
-    render_egui_pass(&state.egui_renderer, &mut egui_encoder, &view, &paint_jobs, &screen_descriptor);
+    render_egui_pass(
+        &state.egui_renderer,
+        &mut egui_encoder,
+        &view,
+        &paint_jobs,
+        &screen_descriptor,
+    );
     state.queue.submit(std::iter::once(egui_encoder.finish()));
 
     // ---- Read back screenshot ----
@@ -268,7 +343,9 @@ pub fn redraw(state: &mut AppState) {
         if let Some(staging) = &screenshot_staging {
             let slice = staging.slice(..);
             let (tx, rx) = std::sync::mpsc::channel();
-            slice.map_async(wgpu::MapMode::Read, move |result| { let _ = tx.send(result); });
+            slice.map_async(wgpu::MapMode::Read, move |result| {
+                let _ = tx.send(result);
+            });
             state.device.poll(wgpu::Maintain::Wait);
 
             if let Ok(Ok(())) = rx.recv() {
@@ -289,11 +366,21 @@ pub fn redraw(state: &mut AppState) {
                 staging.unmap();
 
                 match state.lab.save_screenshot(
-                    state.world.frame, win_w, win_h, &rgba, state.sim_params.visualization_mode,
+                    state.world.frame,
+                    win_w,
+                    win_h,
+                    &rgba,
+                    state.sim_params.visualization_mode,
                 ) {
                     Ok(path) => {
-                        state.lab.set_status(format!("Screenshot saved: {:?}", path));
-                        state.lab.log_event(state.world.frame, "SCREENSHOT", &format!("Saved to {:?}", path));
+                        state
+                            .lab
+                            .set_status(format!("Screenshot saved: {:?}", path));
+                        state.lab.log_event(
+                            state.world.frame,
+                            "SCREENSHOT",
+                            &format!("Saved to {:?}", path),
+                        );
                     }
                     Err(e) => {
                         state.lab.set_status(format!("Screenshot failed: {}", e));
@@ -308,11 +395,18 @@ pub fn redraw(state: &mut AppState) {
     // ---- Snapshot (state save) ----
     if state.lab.snapshot_requested {
         if let Some(snap) = state.world.readback_snapshot(&state.device, &state.queue) {
-            let path = state.lab.run_dir.join(format!("snapshot_frame{:06}.snap", state.world.frame));
+            let path = state
+                .lab
+                .run_dir
+                .join(format!("snapshot_frame{:06}.snap", state.world.frame));
             match state_io::save_snapshot(path.to_str().unwrap_or("snapshot.snap"), &snap) {
                 Ok(()) => {
                     state.lab.set_status(format!("Snapshot saved: {:?}", path));
-                    state.lab.log_event(state.world.frame, "SNAPSHOT", &format!("Saved to {:?}", path));
+                    state.lab.log_event(
+                        state.world.frame,
+                        "SNAPSHOT",
+                        &format!("Saved to {:?}", path),
+                    );
                 }
                 Err(e) => {
                     log::error!("Snapshot save failed: {}", e);
@@ -338,8 +432,14 @@ pub fn redraw(state: &mut AppState) {
         if let Some(snap) = state.world.readback_snapshot(&state.device, &state.queue) {
             let diag = SimDiagnostics::from_snapshot(&snap)
                 .with_target_mass(target_total_mass() * state.sim_params.target_mass_multiplier);
-            state.lab.record_metrics(&diag, state.world.frame, state.fps);
-            diag.log(state.world.frame, target_total_mass(), state.last_diag.as_ref());
+            state
+                .lab
+                .record_metrics(&diag, state.world.frame, state.fps);
+            diag.log(
+                state.world.frame,
+                target_total_mass(),
+                state.last_diag.as_ref(),
+            );
             state.last_diag = Some(diag);
         }
     }
@@ -361,7 +461,10 @@ fn render_egui_pass(
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view,
             resolve_target: None,
-            ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: wgpu::StoreOp::Store,
+            },
         })],
         depth_stencil_attachment: None,
         timestamp_writes: None,
@@ -384,7 +487,8 @@ pub fn encode_simulation_passes(
     // Pass 1: Velocity field
     {
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("velocity_pass"), timestamp_writes: None,
+            label: Some("velocity_pass"),
+            timestamp_writes: None,
         });
         pass.set_pipeline(&pipelines.velocity_pipeline);
         pass.set_bind_group(0, &pipelines.velocity_bind_groups[cur], &[]);
@@ -394,7 +498,8 @@ pub fn encode_simulation_passes(
     // Pass 2: Evolution
     {
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("evolution_pass"), timestamp_writes: None,
+            label: Some("evolution_pass"),
+            timestamp_writes: None,
         });
         pass.set_pipeline(&pipelines.evolution_pipeline);
         pass.set_bind_group(0, &pipelines.evolution_bind_groups[cur], &[]);
@@ -404,7 +509,8 @@ pub fn encode_simulation_passes(
     // Pass 3: Resource dynamics
     {
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("resources_pass"), timestamp_writes: None,
+            label: Some("resources_pass"),
+            timestamp_writes: None,
         });
         pass.set_pipeline(&pipelines.resources_pipeline);
         pass.set_bind_group(0, &pipelines.resources_bind_groups[cur], &[]);
@@ -414,7 +520,8 @@ pub fn encode_simulation_passes(
     // Pass 4a: Sum total mass
     {
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("sum_mass_pass"), timestamp_writes: None,
+            label: Some("sum_mass_pass"),
+            timestamp_writes: None,
         });
         pass.set_pipeline(&pipelines.sum_mass_pipeline);
         pass.set_bind_group(0, &pipelines.normalize_bind_groups[cur], &[]);
@@ -424,7 +531,8 @@ pub fn encode_simulation_passes(
     // Pass 4b: Normalize mass
     {
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("normalize_pass"), timestamp_writes: None,
+            label: Some("normalize_pass"),
+            timestamp_writes: None,
         });
         pass.set_pipeline(&pipelines.normalize_pipeline);
         pass.set_bind_group(0, &pipelines.normalize_bind_groups[cur], &[]);

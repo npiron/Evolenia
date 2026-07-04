@@ -120,10 +120,22 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > radius { continue; }
+                    if dist > radius {
+                        continue;
+                    }
                     let falloff = (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data, idx, falloff, 0.5, genome, mut_rate);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        falloff,
+                        0.5,
+                        genome,
+                        mut_rate,
+                    );
                 }
             }
         }
@@ -141,13 +153,28 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > outer_r || dist < inner_r { continue; }
-                    let edge_outer = 1.0 - ((dist - outer_r + thickness * 0.3) / (thickness * 0.3)).max(0.0);
+                    if dist > outer_r || dist < inner_r {
+                        continue;
+                    }
+                    let edge_outer =
+                        1.0 - ((dist - outer_r + thickness * 0.3) / (thickness * 0.3)).max(0.0);
                     let edge_inner = ((dist - inner_r) / (thickness * 0.3)).min(1.0);
                     let m = (edge_outer * edge_inner).clamp(0.0, 1.0);
-                    if m < 0.01 { continue; }
+                    if m < 0.01 {
+                        continue;
+                    }
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data, idx, m * 0.8, 0.6, genome, mut_rate);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        m * 0.8,
+                        0.6,
+                        genome,
+                        mut_rate,
+                    );
                 }
             }
         }
@@ -172,10 +199,22 @@ impl WorldState {
                 for dy in -hw..=hw {
                     for dx in -hw..=hw {
                         let d = ((dx * dx + dy * dy) as f32).sqrt();
-                        if d > half_width { continue; }
+                        if d > half_width {
+                            continue;
+                        }
                         let m = (1.0 - d / half_width).max(0.0);
                         let idx = pixel_idx(lx as i32 + dx, ly as i32 + dy);
-                        stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data, idx, m * 0.7, 0.5, genome, mut_rate);
+                        stamp(
+                            &mut mass_data,
+                            &mut energy_data,
+                            &mut genome_a_data,
+                            &mut genome_b_data,
+                            idx,
+                            m * 0.7,
+                            0.5,
+                            genome,
+                            mut_rate,
+                        );
                     }
                 }
             }
@@ -204,11 +243,25 @@ impl WorldState {
                     for dy in -hw..=hw {
                         for dx in -hw..=hw {
                             let d = ((dx * dx + dy * dy) as f32).sqrt();
-                            if d > arm_width { continue; }
+                            if d > arm_width {
+                                continue;
+                            }
                             let m = (1.0 - d / arm_width) * (1.0 - t * 0.3);
-                            if m < 0.01 { continue; }
+                            if m < 0.01 {
+                                continue;
+                            }
                             let idx = pixel_idx(sx as i32 + dx, sy as i32 + dy);
-                            stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data, idx, m * 0.6, 0.55, genome, mut_rate);
+                            stamp(
+                                &mut mass_data,
+                                &mut energy_data,
+                                &mut genome_a_data,
+                                &mut genome_b_data,
+                                idx,
+                                m * 0.6,
+                                0.55,
+                                genome,
+                                mut_rate,
+                            );
                         }
                     }
                 }
@@ -226,12 +279,26 @@ impl WorldState {
             for dy in -patch_r..=patch_r {
                 for dx in -patch_r..=patch_r {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > patch_r as f32 { continue; }
-                    if rng.gen::<f32>() > density { continue; }
+                    if dist > patch_r as f32 {
+                        continue;
+                    }
+                    if rng.gen::<f32>() > density {
+                        continue;
+                    }
                     let falloff = 1.0 - dist / patch_r as f32;
                     let m = falloff * rng.gen_range(0.1..0.5);
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data, idx, m, 0.4, genome, mut_rate);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        m,
+                        0.4,
+                        genome,
+                        mut_rate,
+                    );
                 }
             }
         }
@@ -253,10 +320,22 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > radius { continue; }
+                    if dist > radius {
+                        continue;
+                    }
                     let m = (-dist * dist / (2.0 * radius * radius * 0.3)).exp();
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data, idx, m * 0.9, 0.8, genome, gene_mut);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        m * 0.9,
+                        0.8,
+                        genome,
+                        gene_mut,
+                    );
                 }
             }
         }
@@ -275,7 +354,8 @@ impl WorldState {
 
         let lenia_bias = (1.0 - (params.mutation_rate / 5.0)).clamp(0.0, 1.0)
             * (1.0 - (params.predation_factor / 3.0)).clamp(0.0, 1.0);
-        let desired_lenia = ((cluster_count_hint * 0.06) * (0.35 + lenia_bias * 0.85)).round() as usize;
+        let desired_lenia =
+            ((cluster_count_hint * 0.06) * (0.35 + lenia_bias * 0.85)).round() as usize;
         let lenia_count = desired_lenia.clamp(1, lenia_creatures.len());
 
         for (genome, mut_rate, pattern_r, _name) in lenia_creatures
@@ -289,13 +369,27 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > pr { continue; }
+                    if dist > pr {
+                        continue;
+                    }
                     let normalized = dist / pr;
                     let diff = normalized - 0.5;
                     let m = (-diff * diff / (2.0 * 0.15 * 0.15)).exp();
-                    if m < 0.01 { continue; }
+                    if m < 0.01 {
+                        continue;
+                    }
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data, idx, m * 0.85, 0.7, genome, mut_rate);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        m * 0.85,
+                        0.7,
+                        genome,
+                        mut_rate,
+                    );
                 }
             }
             let asym_dx: i32 = rng.gen_range(-2..3);
@@ -322,11 +416,25 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > blob_r { continue; }
+                    if dist > blob_r {
+                        continue;
+                    }
                     let m = (-dist * dist / (2.0 * blob_r * blob_r * 0.2)).exp();
-                    if m < 0.01 { continue; }
+                    if m < 0.01 {
+                        continue;
+                    }
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data, idx, m * 0.7, 0.6, genome, gene_mut);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        m * 0.7,
+                        0.6,
+                        genome,
+                        gene_mut,
+                    );
                 }
             }
         }
@@ -359,8 +467,11 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > radius { continue; }
-                    let boost = oasis_boost_strength * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
+                    if dist > radius {
+                        continue;
+                    }
+                    let boost = oasis_boost_strength
+                        * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
                     let idx = pixel_idx(cx + dx, cy + dy);
                     resource_data[idx] = (resource_data[idx] + boost).min(1.0);
                 }
@@ -377,8 +488,11 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > radius { continue; }
-                    let reduction = desert_strength * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
+                    if dist > radius {
+                        continue;
+                    }
+                    let reduction =
+                        desert_strength * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
                     let idx = pixel_idx(cx + dx, cy + dy);
                     resource_data[idx] = (resource_data[idx] - reduction).max(0.05);
                 }
@@ -396,9 +510,14 @@ impl WorldState {
             }
         }
 
-        let genome_a_flat: Vec<f32> = genome_a_data.iter().flat_map(|g| g.iter().copied()).collect();
+        let genome_a_flat: Vec<f32> = genome_a_data
+            .iter()
+            .flat_map(|g| g.iter().copied())
+            .collect();
 
-        let usage = wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST;
+        let usage = wgpu::BufferUsages::STORAGE
+            | wgpu::BufferUsages::COPY_SRC
+            | wgpu::BufferUsages::COPY_DST;
 
         let create_f32_buffer = |label: &str, data: &[f32]| -> wgpu::Buffer {
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -435,15 +554,25 @@ impl WorldState {
         let mass_sum = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("mass_sum"),
             size: 8,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
         let sim_params = SimParams {
-            width: WORLD_WIDTH, height: WORLD_HEIGHT, frame: 0, dt: DT,
-            mutation_rate_mult: 1.0, predation_factor: 1.0,
-            radius_cost_exp: 1.5, agg_mobility: 0.3, starvation_severity: 0.05,
-            _pad1: 0, _pad2: 0, _pad3: 0,
+            width: WORLD_WIDTH,
+            height: WORLD_HEIGHT,
+            frame: 0,
+            dt: DT,
+            mutation_rate_mult: 1.0,
+            predation_factor: 1.0,
+            radius_cost_exp: 1.5,
+            agg_mobility: 0.3,
+            starvation_severity: 0.05,
+            _pad1: 0,
+            _pad2: 0,
+            _pad3: 0,
         };
         let sim_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("sim_params"),
@@ -451,7 +580,12 @@ impl WorldState {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let velocity_params = VelocityParams { width: WORLD_WIDTH, height: WORLD_HEIGHT, frame: 0, _pad: 0 };
+        let velocity_params = VelocityParams {
+            width: WORLD_WIDTH,
+            height: WORLD_HEIGHT,
+            frame: 0,
+            _pad: 0,
+        };
         let velocity_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("velocity_params"),
             contents: bytemuck::bytes_of(&velocity_params),
@@ -459,9 +593,14 @@ impl WorldState {
         });
 
         let resource_params = ResourceParams {
-            width: WORLD_WIDTH, height: WORLD_HEIGHT,
-            diffusion: 0.08, feed_rate: 0.010, consumption: 0.08,
-            _pad1: 0, _pad2: 0, _pad3: 0,
+            width: WORLD_WIDTH,
+            height: WORLD_HEIGHT,
+            diffusion: 0.08,
+            feed_rate: 0.010,
+            consumption: 0.08,
+            _pad1: 0,
+            _pad2: 0,
+            _pad3: 0,
         };
         let resource_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("resource_params"),
@@ -470,20 +609,29 @@ impl WorldState {
         });
 
         let normalize_params = NormalizeParams {
-            width: WORLD_WIDTH, height: WORLD_HEIGHT,
+            width: WORLD_WIDTH,
+            height: WORLD_HEIGHT,
             target_mass_x1000: (target_total_mass() * 1000.0) as u32,
-            damping_x1000: 300, enabled: 1, dust_floor_x1000: 2,
-            _pad2: 0, _pad3: 0,
+            damping_x1000: 300,
+            enabled: 1,
+            dust_floor_x1000: 2,
+            _pad2: 0,
+            _pad3: 0,
         };
-        let normalize_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("normalize_params"),
-            contents: bytemuck::bytes_of(&normalize_params),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        let normalize_params_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("normalize_params"),
+                contents: bytemuck::bytes_of(&normalize_params),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
 
         let render_params = RenderParams {
-            width: WORLD_WIDTH, height: WORLD_HEIGHT,
-            visualization_mode: 0, show_legend: 0, time: 0.0, _pad: 0.0,
+            width: WORLD_WIDTH,
+            height: WORLD_HEIGHT,
+            visualization_mode: 0,
+            show_legend: 0,
+            time: 0.0,
+            _pad: 0.0,
         };
         let render_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("render_params"),
@@ -495,27 +643,55 @@ impl WorldState {
         let n_bytes_f32 = (n * std::mem::size_of::<f32>()) as u64;
 
         let staging_mass = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("staging_mass"), size: n_bytes_f32, usage: staging_usage, mapped_at_creation: false,
+            label: Some("staging_mass"),
+            size: n_bytes_f32,
+            usage: staging_usage,
+            mapped_at_creation: false,
         });
         let staging_energy = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("staging_energy"), size: n_bytes_f32, usage: staging_usage, mapped_at_creation: false,
+            label: Some("staging_energy"),
+            size: n_bytes_f32,
+            usage: staging_usage,
+            mapped_at_creation: false,
         });
         let staging_genome_a = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("staging_genome_a"), size: n_bytes_f32 * 4, usage: staging_usage, mapped_at_creation: false,
+            label: Some("staging_genome_a"),
+            size: n_bytes_f32 * 4,
+            usage: staging_usage,
+            mapped_at_creation: false,
         });
         let staging_genome_b = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("staging_genome_b"), size: n_bytes_f32, usage: staging_usage, mapped_at_creation: false,
+            label: Some("staging_genome_b"),
+            size: n_bytes_f32,
+            usage: staging_usage,
+            mapped_at_creation: false,
         });
         let staging_resource = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("staging_resource"), size: n_bytes_f32, usage: staging_usage, mapped_at_creation: false,
+            label: Some("staging_resource"),
+            size: n_bytes_f32,
+            usage: staging_usage,
+            mapped_at_creation: false,
         });
 
         WorldState {
-            current: 0, mass, energy, genome_a, genome_b,
-            resource_map, velocity, mass_sum,
-            staging_mass, staging_energy, staging_genome_a, staging_genome_b, staging_resource,
-            sim_params_buffer, velocity_params_buffer, resource_params_buffer,
-            normalize_params_buffer, render_params_buffer,
+            current: 0,
+            mass,
+            energy,
+            genome_a,
+            genome_b,
+            resource_map,
+            velocity,
+            mass_sum,
+            staging_mass,
+            staging_energy,
+            staging_genome_a,
+            staging_genome_b,
+            staging_resource,
+            sim_params_buffer,
+            velocity_params_buffer,
+            resource_params_buffer,
+            normalize_params_buffer,
+            render_params_buffer,
             frame: 0,
         }
     }

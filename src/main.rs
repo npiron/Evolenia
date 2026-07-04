@@ -33,7 +33,7 @@ fn main() {
     let cli = CliOptions::from_args(std::env::args().collect());
 
     // Load optional TOML config file
-    let _config_params = cli
+    let config_params = cli
         .config_path
         .as_ref()
         .and_then(|path| match load_toml_config(path) {
@@ -45,7 +45,8 @@ fn main() {
                 log::warn!("Failed to load config from {}: {}", path, e);
                 None
             }
-        });
+        })
+        .unwrap_or_default();
 
     if cli.headless || cli.headless_then_gui {
         let headless_cfg = HeadlessConfig {
@@ -54,6 +55,7 @@ fn main() {
             save_state_path: Some(cli.save_state_path.clone()),
             progress_interval: cli.progress_interval,
             seed: cli.seed,
+            sim_params: config_params.clone(),
         };
         if let Err(err) = run_headless(&headless_cfg) {
             eprintln!("Headless run failed: {err}");
@@ -74,6 +76,7 @@ fn main() {
             cli.load_state_path
         },
         diag_interval: cli.diag_interval,
+        sim_params: config_params,
     });
     event_loop.run_app(&mut app).unwrap();
 }

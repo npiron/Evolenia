@@ -38,6 +38,7 @@ pub struct App {
 pub struct AppConfig {
     pub initial_state_path: Option<String>,
     pub diag_interval: u32,
+    pub sim_params: SimulationParams,
 }
 
 impl Default for AppConfig {
@@ -45,11 +46,15 @@ impl Default for AppConfig {
         Self {
             initial_state_path: None,
             diag_interval: 300,
+            sim_params: SimulationParams::default(),
         }
     }
 }
 
-pub(crate) fn recreate_msaa(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> (wgpu::Texture, wgpu::TextureView) {
+pub(crate) fn recreate_msaa(
+    device: &wgpu::Device,
+    config: &wgpu::SurfaceConfiguration,
+) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("msaa_texture"),
         size: wgpu::Extent3d {
@@ -102,7 +107,10 @@ pub(crate) struct AppState {
 
 impl App {
     pub fn new(config: AppConfig) -> Self {
-        Self { state: None, config }
+        Self {
+            state: None,
+            config,
+        }
     }
 }
 
@@ -131,7 +139,7 @@ impl ApplicationHandler for App {
 
         let (msaa_tex, msaa_view) = recreate_msaa(&device, &surface_config);
 
-        let sim_params = SimulationParams::default();
+        let sim_params = self.config.sim_params.clone();
         let mut world =
             WorldState::new_with_config(&device, sim_params.effective_seed(), &sim_params);
         if let Some(path) = &self.config.initial_state_path {
@@ -140,7 +148,10 @@ impl ApplicationHandler for App {
                     if world.apply_snapshot(&queue, &snapshot) {
                         log::info!("Loaded simulation state from {}", path);
                     } else {
-                        log::warn!("State file {} has incompatible dimensions; using fresh world", path);
+                        log::warn!(
+                            "State file {} has incompatible dimensions; using fresh world",
+                            path
+                        );
                     }
                 }
                 Err(err) => {
@@ -169,19 +180,28 @@ impl ApplicationHandler for App {
 
         log::info!(
             "EvoLenia v2 Research Lab initialized: {}x{}, target mass = {:.0}",
-            WORLD_WIDTH, WORLD_HEIGHT, target_total_mass()
+            WORLD_WIDTH,
+            WORLD_HEIGHT,
+            target_total_mass()
         );
 
         self.state = Some(AppState {
-            device, queue, surface, surface_config,
-            msaa_texture: Some(msaa_tex), msaa_view: Some(msaa_view),
-            world, pipelines,
+            device,
+            queue,
+            surface,
+            surface_config,
+            msaa_texture: Some(msaa_tex),
+            msaa_view: Some(msaa_view),
+            world,
+            pipelines,
             window: window.clone(),
             camera: CameraState::default(),
             keys: input::KeysHeld::default(),
             sim_params,
             hud,
-            egui_ctx, egui_winit_state, egui_renderer,
+            egui_ctx,
+            egui_winit_state,
+            egui_renderer,
             lab: LabState::default(),
             last_redraw: Instant::now(),
             fps: 0.0,
@@ -233,7 +253,9 @@ impl ApplicationHandler for App {
                 if new_size.width > 0 && new_size.height > 0 {
                     state.surface_config.width = new_size.width;
                     state.surface_config.height = new_size.height;
-                    state.surface.configure(&state.device, &state.surface_config);
+                    state
+                        .surface
+                        .configure(&state.device, &state.surface_config);
                     let (tex, view) = recreate_msaa(&state.device, &state.surface_config);
                     state.msaa_texture = Some(tex);
                     state.msaa_view = Some(view);

@@ -53,10 +53,7 @@ pub fn render_menu_bar(ctx: &egui::Context, params: &mut SimulationParams, lab: 
                 {
                     ui.close_menu();
                 }
-                if ui
-                    .checkbox(&mut lab.dark_mode, "🌙 Dark Mode")
-                    .clicked()
-                {
+                if ui.checkbox(&mut lab.dark_mode, "🌙 Dark Mode").clicked() {
                     crate::app::apply_theme(ctx, lab.dark_mode);
                     ui.close_menu();
                 }
@@ -71,7 +68,10 @@ pub fn render_menu_bar(ctx: &egui::Context, params: &mut SimulationParams, lab: 
                 ui.label("Visualisation:");
                 for mode in 0..VIS_MODE_COUNT {
                     let name = visualization_mode_name(mode);
-                    if ui.radio_value(&mut params.visualization_mode, mode, name).clicked() {
+                    if ui
+                        .radio_value(&mut params.visualization_mode, mode, name)
+                        .clicked()
+                    {
                         ui.close_menu();
                     }
                 }
@@ -83,10 +83,18 @@ pub fn render_menu_bar(ctx: &egui::Context, params: &mut SimulationParams, lab: 
 
             // ── Simulation ──
             ui.menu_button("Simulation", |ui| {
-                let btn_text = if params.paused { "▶ Play" } else { "⏸ Pause" };
+                let btn_text = if params.paused {
+                    "▶ Play"
+                } else {
+                    "⏸ Pause"
+                };
                 if ui.button(btn_text).clicked() {
                     params.paused = !params.paused;
-                    lab.log_event(0, "CONTROL", if params.paused { "Paused" } else { "Resumed" });
+                    lab.log_event(
+                        0,
+                        "CONTROL",
+                        if params.paused { "Paused" } else { "Resumed" },
+                    );
                     ui.close_menu();
                 }
                 if ui.button("⏭ Step").clicked() {

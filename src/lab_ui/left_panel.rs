@@ -77,7 +77,11 @@ fn render_control_section(ui: &mut egui::Ui, params: &mut SimulationParams, lab:
             .on_hover_text("Simulation time step — smaller = more stable but slower evolution")
             .changed()
             {
-                lab.log_event(0, "PARAM_CHANGE", &format!("time_step={:.2}", params.time_step));
+                lab.log_event(
+                    0,
+                    "PARAM_CHANGE",
+                    &format!("time_step={:.2}", params.time_step),
+                );
             }
         });
 
@@ -108,10 +112,16 @@ fn render_control_section(ui: &mut egui::Ui, params: &mut SimulationParams, lab:
 
 // ======================== Parameters Section ========================
 
-fn section_card<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> egui::InnerResponse<R> {
+fn section_card<R>(
+    ui: &mut egui::Ui,
+    add_contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> egui::InnerResponse<R> {
     egui::Frame::new()
         .fill(egui::Color32::TRANSPARENT)
-        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(200, 205, 215)))
+        .stroke(egui::Stroke::new(
+            1.0,
+            egui::Color32::from_rgb(200, 205, 215),
+        ))
         .corner_radius(4)
         .inner_margin(egui::Margin::symmetric(8, 6))
         .outer_margin(egui::Margin::symmetric(0, 2))
@@ -317,7 +327,11 @@ fn render_params_section(ui: &mut egui::Ui, params: &mut SimulationParams, lab: 
 
 // ======================== Perturbation Section ========================
 
-fn render_perturbation_section(ui: &mut egui::Ui, params: &mut SimulationParams, lab: &mut LabState) {
+fn render_perturbation_section(
+    ui: &mut egui::Ui,
+    params: &mut SimulationParams,
+    lab: &mut LabState,
+) {
     egui::CollapsingHeader::new(
         egui::RichText::new("🌊 Perturbations")
             .strong()
@@ -344,7 +358,8 @@ fn render_perturbation_section(ui: &mut egui::Ui, params: &mut SimulationParams,
             egui::Slider::new(&mut params.perturbation_intensity, 0.0..=1.0)
                 .text("Intensité")
                 .step_by(0.05),
-            0.0, 1.0,
+            0.0,
+            1.0,
         )
         .on_hover_text("Force de la perturbation");
 
@@ -353,7 +368,8 @@ fn render_perturbation_section(ui: &mut egui::Ui, params: &mut SimulationParams,
             egui::Slider::new(&mut params.perturbation_radius, 0.05..=0.5)
                 .text("Rayon")
                 .step_by(0.01),
-            0.05, 0.5,
+            0.05,
+            0.5,
         )
         .on_hover_text("Taille de la zone affectée (fraction du monde)");
 
@@ -410,8 +426,7 @@ fn render_perturbation_section(ui: &mut egui::Ui, params: &mut SimulationParams,
 
         if params.perturbation_active {
             ui.label(
-                egui::RichText::new("● En attente…")
-                    .color(egui::Color32::from_rgb(200, 150, 20)),
+                egui::RichText::new("● En attente…").color(egui::Color32::from_rgb(200, 150, 20)),
             );
         }
     });
@@ -470,8 +485,7 @@ fn render_experiment_section(ui: &mut egui::Ui, params: &mut SimulationParams, l
 
             if lab.run_active {
                 ui.label(
-                    egui::RichText::new("● Recording")
-                        .color(egui::Color32::from_rgb(30, 180, 40)),
+                    egui::RichText::new("● Recording").color(egui::Color32::from_rgb(30, 180, 40)),
                 );
             }
 
@@ -511,13 +525,12 @@ fn render_experiment_section(ui: &mut egui::Ui, params: &mut SimulationParams, l
                         .map(|p| p.category == *cat)
                         .unwrap_or(cat_idx == 0);
 
-                    let btn = egui::Button::new(format!("{} {}", cat_emoji, cat)).fill(
-                        if is_selected {
+                    let btn =
+                        egui::Button::new(format!("{} {}", cat_emoji, cat)).fill(if is_selected {
                             egui::Color32::from_rgb(0, 122, 255)
                         } else {
                             egui::Color32::from_rgb(225, 228, 235)
-                        },
-                    );
+                        });
 
                     if ui.add(btn).clicked() {
                         lab.selected_preset_index = first_in_cat;
@@ -554,9 +567,10 @@ fn render_experiment_section(ui: &mut egui::Ui, params: &mut SimulationParams, l
                                 egui::Color32::from_rgb(232, 235, 240)
                             };
 
-                            let btn = egui::Button::new(format!("{} {}", preset.emoji, preset.name))
-                                .fill(btn_color)
-                                .min_size(egui::vec2(140.0, 24.0));
+                            let btn =
+                                egui::Button::new(format!("{} {}", preset.emoji, preset.name))
+                                    .fill(btn_color)
+                                    .min_size(egui::vec2(140.0, 24.0));
 
                             if ui.add(btn).clicked() {
                                 lab.selected_preset_index = idx;
