@@ -3,7 +3,7 @@
 // Camera state & GPU uniform for pan/zoom navigation.
 // ============================================================================
 
-use crate::world::{WORLD_WIDTH, WORLD_HEIGHT};
+use crate::world::{WORLD_HEIGHT, WORLD_WIDTH};
 
 /// GPU-side camera uniforms uploaded every frame.
 #[repr(C)]
@@ -11,8 +11,8 @@ use crate::world::{WORLD_WIDTH, WORLD_HEIGHT};
 pub struct CameraUniforms {
     pub offset: [f32; 2],
     pub zoom: f32,
-    pub aspect_ratio: f32,      // window_width / window_height
-    pub world_aspect: f32,       // world_width / world_height
+    pub aspect_ratio: f32, // window_width / window_height
+    pub world_aspect: f32, // world_width / world_height
     pub _pad1: f32,
     pub _pad2: f32,
     pub _pad3: f32,

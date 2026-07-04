@@ -2,9 +2,9 @@
 // normalize_mass.wgsl — EvoLenia v2
 // Two-pass mass conservation correction.
 //
-// Pass A (sum_mass): Each workgroup atomically accumulates its local mass
+// Pass A (sum_mass): Each thread atomically accumulates its mass
 //   into a global atomic counter.
-// Pass B (normalize_mass): A single correction factor is applied globally
+// Pass B (normalize): A single correction factor is applied globally
 //   so that total mass returns to the target value.
 //
 // Biology: This enforces the conservation law — mass is neither created
@@ -20,7 +20,7 @@ struct Params {
     target_mass_x1000: u32, // target mass * 1000, encoded as u32
     damping_x1000: u32,    // damping factor * 1000
     enabled: u32,          // 0 = disabled, 1 = enabled
-    _pad1: u32,
+    dust_floor_x1000: u32, // mass below this is zeroed (×1000)
     _pad2: u32,
     _pad3: u32,
 }
@@ -38,9 +38,16 @@ fn sum_mass(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
 
-    // Atomically add mass * 1000 (integer representation for atomics)
+    // Guard against NaN/Inf in mass input (corrupted data or shader bug)
     let m = mass[gid.x];
-    let m_int = u32(m * 1000.0);
+    // NaN: m != m. Inf: m != 0 && m * 2 == m.
+    if (m != m || (m != 0.0 && m * 2.0 == m) || m < 0.0) {
+        mass[gid.x] = 0.0;
+        return;
+    }
+
+    // Atomically add mass * 1000 (integer representation for atomics)
+    let m_int = u32(clamp(m, 0.0, 1.0) * 1000.0);
     atomicAdd(&mass_sum[0], m_int);
 }
 
@@ -56,7 +63,7 @@ fn normalize(@builtin(global_invocation_id) gid: vec3<u32>) {
     let actual_total = f32(atomicLoad(&mass_sum[0])) / 1000.0;
     let target_total = f32(params.target_mass_x1000) / 1000.0;
 
-    if (params.enabled > 0u && actual_total > 0.001) {
+    if (params.enabled > 0u && actual_total > 0.001 && target_total > 0.001) {
         let raw_correction = target_total / actual_total;
         // Soft correction: blend toward target with damping factor (parameterized)
         let damping = f32(params.damping_x1000) / 1000.0;
@@ -64,6 +71,8 @@ fn normalize(@builtin(global_invocation_id) gid: vec3<u32>) {
         let corrected = clamp(mass[gid.x] * correction, 0.0, 1.0);
         // Dust floor: prevent thin-film amplification over the whole world.
         // Slightly relaxes exact conservation in favor of ecological patchiness.
-        mass[gid.x] = select(corrected, 0.0, corrected < 0.002);
+        // Configurable via uniform (default: 0.002 = 2 × 1000⁻¹).
+        let dust_floor = f32(params.dust_floor_x1000) / 1000.0;
+        mass[gid.x] = select(corrected, 0.0, corrected < dust_floor);
     }
 }

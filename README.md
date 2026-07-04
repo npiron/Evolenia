@@ -1,5 +1,7 @@
 # 🌌 EvoLenia v2.0
 
+[![CI](https://github.com/npiron/Evolenia/actions/workflows/ci.yml/badge.svg)](https://github.com/npiron/Evolenia/actions/workflows/ci.yml)
+
 **Spatially-Varying Continuous Cellular Automaton with Endogenous Evolution**
 
 EvoLenia is an artificial life simulation where evolution emerges from physical laws, not from hand-coded rules. Each pixel is an autonomous organism with its own **5-gene genome**, creating a colorful ecosystem where species, predation, and adaptation emerge spontaneously.

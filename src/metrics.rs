@@ -20,7 +20,7 @@ pub struct SimDiagnostics {
     pub avg_mass_live: f32, // average mass over live pixels only
 
     // Energy
-    pub avg_energy: f32,     // over live pixels
+    pub avg_energy: f32, // over live pixels
     pub min_energy_live: f32,
     pub starving_fraction: f32, // fraction of live pixels with energy ≤ 0.01
 
@@ -39,17 +39,17 @@ pub struct SimDiagnostics {
 
     // --- Phase 1 eco metrics ---
     // Trophic balance
-    pub prey_fraction: f32,        // fraction with agg < 0.2
-    pub opportunist_fraction: f32, // fraction with 0.2 <= agg < 0.5
+    pub prey_fraction: f32,            // fraction with agg < 0.2
+    pub opportunist_fraction: f32,     // fraction with 0.2 <= agg < 0.5
     pub predator_fraction_strict: f32, // fraction with agg >= 0.5
 
     // Diversity dynamics
-    pub effective_diversity: f32,  // Hill number N1 = exp(H) — effective species count
-    pub genome_variance: f32,      // variance of genome trait space
+    pub effective_diversity: f32, // Hill number N1 = exp(H) — effective species count
+    pub genome_variance: f32,     // variance of genome trait space
 
     // Energy flow
     pub total_energy: f32,
-    pub energy_flux: f32,          // mass-weighted energy change capacity
+    pub energy_flux: f32, // mass-weighted energy change capacity
 }
 
 impl SimDiagnostics {
@@ -68,20 +68,38 @@ impl SimDiagnostics {
         for i in 0..n {
             let m = snap.mass[i];
             total_mass += m as f64;
-            if m > max_mass { max_mass = m; }
+            if m > max_mass {
+                max_mass = m;
+            }
             if m > 0.01 {
                 live_pixels += 1;
                 let e = snap.energy[i];
                 sum_energy += e as f64;
-                if e < min_energy_live { min_energy_live = e; }
-                if e <= 0.01 { starving += 1; }
+                if e < min_energy_live {
+                    min_energy_live = e;
+                }
+                if e <= 0.01 {
+                    starving += 1;
+                }
             }
         }
 
         let live_fraction = live_pixels as f32 / n as f32;
-        let avg_mass_live = if live_pixels > 0 { total_mass as f32 / live_pixels as f32 } else { 0.0 };
-        let avg_energy = if live_pixels > 0 { sum_energy as f32 / live_pixels as f32 } else { 0.0 };
-        let starving_fraction = if live_pixels > 0 { starving as f32 / live_pixels as f32 } else { 0.0 };
+        let avg_mass_live = if live_pixels > 0 {
+            total_mass as f32 / live_pixels as f32
+        } else {
+            0.0
+        };
+        let avg_energy = if live_pixels > 0 {
+            sum_energy as f32 / live_pixels as f32
+        } else {
+            0.0
+        };
+        let starving_fraction = if live_pixels > 0 {
+            starving as f32 / live_pixels as f32
+        } else {
+            0.0
+        };
 
         // ---- Mass spatial std dev ----
         let mean_mass = total_mass as f32 / n as f32;
@@ -99,15 +117,19 @@ impl SimDiagnostics {
         for i in 0..n {
             let r = snap.resource[i];
             sum_resource += r as f64;
-            if r < min_resource { min_resource = r; }
-            if r < 0.1 { depleted += 1; }
+            if r < min_resource {
+                min_resource = r;
+            }
+            if r < 0.1 {
+                depleted += 1;
+            }
         }
         let avg_resource = sum_resource as f32 / n as f32;
         let depleted_fraction = depleted as f32 / n as f32;
 
         // ---- Genetics ----
         let genetic_entropy = compute_genetic_entropy(&snap.genome_a, &snap.mass, 10);
-        let species_count = detect_species(&snap.genome_a, &snap.mass, 20);
+        let species_count = detect_species(&snap.genome_a, &snap.mass, 100);
         let genome_stats = compute_genome_stats(&snap.genome_a, &snap.genome_b, &snap.mass);
 
         // ---- Trophic classification ----
@@ -119,7 +141,9 @@ impl SimDiagnostics {
         let num_pixels = snap.genome_a.len() / 4;
         for i in 0..num_pixels {
             let m = snap.mass[i];
-            if m < 0.01 { continue; }
+            if m < 0.01 {
+                continue;
+            }
             let agg = snap.genome_a[i * 4 + 3];
             if agg < 0.2 {
                 prey_mass += m as f64;
@@ -151,7 +175,9 @@ impl SimDiagnostics {
             let mut var_sum = 0.0f64;
             let mut var_count = 0u32;
             for i in 0..num_pixels {
-                if snap.mass[i] < 0.01 { continue; }
+                if snap.mass[i] < 0.01 {
+                    continue;
+                }
                 let dr = (snap.genome_a[i * 4] / 16.0 - mean_r / 16.0) as f64;
                 let dm = (snap.genome_a[i * 4 + 1] - mean_mu) as f64;
                 let ds = (snap.genome_a[i * 4 + 2] / 0.3 - mean_sigma / 0.3) as f64;
@@ -159,7 +185,11 @@ impl SimDiagnostics {
                 var_sum += dr * dr + dm * dm + ds * ds + da * da;
                 var_count += 1;
             }
-            genome_trait_var = if var_count > 0 { var_sum / var_count as f64 } else { 0.0 };
+            genome_trait_var = if var_count > 0 {
+                var_sum / var_count as f64
+            } else {
+                0.0
+            };
         }
 
         // Energy flux proxy: resources available × mass consumption capacity
@@ -193,10 +223,7 @@ impl SimDiagnostics {
 
     /// Log all diagnostics at INFO level, with optional delta from previous snapshot.
     pub fn log(&self, frame: u32, target_mass: f32, prev: Option<&SimDiagnostics>) {
-        log::info!(
-            "══════════════ Frame {} Diagnostics ══════════════",
-            frame
-        );
+        log::info!("══════════════ Frame {} Diagnostics ══════════════", frame);
 
         if let Some(p) = prev {
             let dm = self.total_mass - p.total_mass;
@@ -205,7 +232,10 @@ impl SimDiagnostics {
             let dagg = self.genome_stats.avg_aggressivity - p.genome_stats.avg_aggressivity;
             log::info!(
                 "TRENDS: Δmass={:+.0} | Δlive={:+} | Δmu={:+.4} | Δagg={:+.4} | Δentropy={:+.2}",
-                dm, dlive, dmu, dagg,
+                dm,
+                dlive,
+                dmu,
+                dagg,
                 self.genetic_entropy - p.genetic_entropy,
             );
         }
@@ -246,10 +276,7 @@ impl SimDiagnostics {
             self.genome_stats.avg_aggressivity,
             self.genome_stats.avg_mutation_rate,
         );
-        log::info!(
-            "SPATIAL: mass_stddev={:.4}",
-            self.mass_std_dev,
-        );
+        log::info!("SPATIAL: mass_stddev={:.4}", self.mass_std_dev,);
         log::info!(
             "TROPHIC: prey={:.1}% | opportunist={:.1}% | predator={:.1}%",
             self.prey_fraction * 100.0,
@@ -330,7 +357,7 @@ pub fn detect_species(genome_a: &[f32], mass: &[f32], max_species: usize) -> usi
     }
 
     let num_pixels = genome_a.len() / 4;
-    
+
     // Collect genomes weighted by mass (alive organisms only)
     let mut genomes: Vec<(f32, f32, f32, f32)> = Vec::new();
     for i in 0..num_pixels {
@@ -395,11 +422,7 @@ pub struct GenomeStats {
 }
 
 /// Computes mass-weighted average genome statistics
-pub fn compute_genome_stats(
-    genome_a: &[f32],
-    genome_b: &[f32],
-    mass: &[f32],
-) -> GenomeStats {
+pub fn compute_genome_stats(genome_a: &[f32], genome_b: &[f32], mass: &[f32]) -> GenomeStats {
     let num_pixels = genome_a.len() / 4;
     let mut total_mass = 0.0;
     let mut sum_r = 0.0;

@@ -30,7 +30,10 @@ pub fn load_snapshot(path: &str) -> io::Result<BufferSnapshot> {
     let mut magic = [0u8; 8];
     file.read_exact(&mut magic)?;
     if &magic != MAGIC {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid snapshot magic"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid snapshot magic",
+        ));
     }
 
     let width = read_u32(&mut file)?;

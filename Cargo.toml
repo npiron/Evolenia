@@ -1,6 +1,6 @@
 [package]
 name = "evolenia"
-version = "2.0.0"
+version = "2.1.0"
 edition = "2021"
 description = "EvoLenia v2 — Spatially-varying continuous cellular automaton with endogenous evolution"
 
@@ -23,5 +23,6 @@ egui_plot = "0.31"
 # Serialization & export
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+toml = "1"
 image = "0.25"
 chrono = "0.4"

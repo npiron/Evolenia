@@ -124,5 +124,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Clamp velocity to prevent instability
     vel = clamp(vel, vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0));
 
+    // NaN/Inf guard: reset to zero if any component is non-finite
+    // NaN: x != x. Inf: x != 0 && x * 2 == x.
+    if (vel.x != vel.x || (vel.x != 0.0 && vel.x * 2.0 == vel.x) ||
+        vel.y != vel.y || (vel.y != 0.0 && vel.y * 2.0 == vel.y)) {
+        vel = vec2<f32>(0.0, 0.0);
+    }
+
     velocity[i] = vel;
 }

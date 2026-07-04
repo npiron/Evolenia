@@ -11,6 +11,7 @@
 //   5 = Metabolic Stress: Shows energy deficit — cyan=healthy, magenta=starving
 //   6 = Advection Flux: Velocity field magnitude — blue=still, yellow=fast
 //   7 = Trophic Roles: Prey(green) / Opportunist(blue) / Predator(red)
+//   8 = Debug Raw: Direct buffer values — R=mass, G=energy, B=resources
 // ============================================================================
 
 struct VertexOutput {
@@ -88,8 +89,14 @@ fn hsv2rgb(h: f32, s: f32, v: f32) -> vec3<f32> {
         rgb = vec3<f32>(c, 0.0, x);
     }
     
-    let m = v - c;
-    return rgb + vec3<f32>(m);
+    let m_v = v - c;
+    return rgb + vec3<f32>(m_v);
+}
+
+// Shared helper: blend a color over the background using mass as opacity.
+// Used by all visualization modes to avoid repeating `mix(bg, X, m)`.
+fn blend_over_background(bg: vec3<f32>, color: vec3<f32>, m: f32) -> vec3<f32> {
+    return mix(bg, color, clamp(m, 0.0, 1.0));
 }
 
 @fragment
@@ -142,15 +149,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         );
         let predator_glow = step(0.7, ga.w) * vec3<f32>(1.0, 0.5, 0.0);
         let final_color = clamp(species_color + predator_glow * 0.3, vec3<f32>(0.0), vec3<f32>(1.0));
-        let color = mix(bg, final_color, m);
-        return vec4<f32>(color, 1.0);
+        return vec4<f32>(blend_over_background(bg, final_color, m), 1.0);
     }
     
     // Mode 1: Energy Heatmap (blue = low, red = high)
     if render_params.visualization_mode == 1u {
         let heat_color = vec3<f32>(e, 0.2, 1.0 - e); // Blue -> Purple -> Red
-        let color = mix(bg, heat_color, m);
-        return vec4<f32>(color, 1.0);
+        return vec4<f32>(blend_over_background(bg, heat_color, m), 1.0);
     }
     
     // Mode 2: Mass Density (grayscale)
@@ -164,8 +169,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         // Hash genome to a hue (0-1)
         let genome_hash = fract((ga.x * 0.1 + ga.y * 0.3 + ga.z * 3.0 + ga.w * 0.7) * 43758.5453);
         let diversity_color = hsv2rgb(genome_hash, 0.8, 0.9);
-        let color = mix(bg, diversity_color, m);
-        return vec4<f32>(color, 1.0);
+        return vec4<f32>(blend_over_background(bg, diversity_color, m), 1.0);
     }
     
     // Mode 4: Predator/Prey (red = predator, green = prey)
@@ -173,12 +177,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let predator_color = vec3<f32>(1.0, 0.0, 0.0); // Red
         let prey_color = vec3<f32>(0.0, 1.0, 0.0);     // Green
         let species_color = mix(prey_color, predator_color, ga.w);
-        let color = mix(bg, species_color, m);
-        return vec4<f32>(color, 1.0);
+        return vec4<f32>(blend_over_background(bg, species_color, m), 1.0);
     }
 
     // Mode 5: Metabolic Stress — energy deficit visualization
-    // Cyan = healthy (high energy), Magenta = starving, overlaid on resource landscape
     if render_params.visualization_mode == 5u {
         let r_val = resource_map[idx];
         let resource_bg = vec3<f32>(0.02, 0.08 * r_val, 0.02); // dim green for resource base
@@ -187,14 +189,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             let healthy_col = vec3<f32>(0.0, 0.9, 0.9);   // cyan
             let starving_col = vec3<f32>(0.9, 0.0, 0.7);  // magenta
             let stress_col = mix(healthy_col, starving_col, stress);
-            let color = mix(resource_bg, stress_col, m);
-            return vec4<f32>(color, 1.0);
+            return vec4<f32>(blend_over_background(resource_bg, stress_col, m), 1.0);
         }
         return vec4<f32>(resource_bg, 1.0);
     }
 
     // Mode 6: Advection Flux — velocity field magnitude
-    // Blue = stationary, Yellow = high flux, with directional tint
     if render_params.visualization_mode == 6u {
         let vel = velocity[idx];
         let speed = length(vel);
@@ -209,31 +209,33 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Mode 7: Trophic Roles — multi-level trophic classification
-    // Green = passive prey (agg<0.2), Blue = opportunist (0.2-0.5), Red = predator (>0.5)
-    // Brightness = mass, saturation = specialization (low sigma = specialist)
     if render_params.visualization_mode == 7u {
         if (m > 0.01) {
             let agg_v = ga.w;
             let specialization = clamp(1.0 - ga.z / 0.2, 0.0, 1.0);
             var role_col: vec3<f32>;
             if (agg_v < 0.2) {
-                // Prey: green → lime, specialist prey are more saturated
                 role_col = vec3<f32>(0.1, 0.85, 0.15);
             } else if (agg_v < 0.5) {
-                // Opportunist: blue-teal, interpolated
                 let t = (agg_v - 0.2) / 0.3;
                 role_col = mix(vec3<f32>(0.1, 0.7, 0.6), vec3<f32>(0.3, 0.3, 0.9), t);
             } else {
-                // Predator: orange → red
                 let t = (agg_v - 0.5) / 0.5;
                 role_col = mix(vec3<f32>(1.0, 0.5, 0.0), vec3<f32>(1.0, 0.0, 0.0), t);
             }
             let sat = mix(0.5, 1.0, specialization);
             let final_col = mix(vec3<f32>(0.5), role_col, sat);
-            let color = mix(bg, final_col, m);
-            return vec4<f32>(color, 1.0);
+            return vec4<f32>(blend_over_background(bg, final_col, m), 1.0);
         }
         return vec4<f32>(bg, 1.0);
+    }
+
+    // Mode 8: Debug Raw — direct rendering of raw buffer values (no aesthetic filtering)
+    // Useful for shader debugging: red = mass, green = energy, blue = resources
+    if render_params.visualization_mode == 8u {
+        let r_val = resource_map[idx];
+        let raw_col = vec3<f32>(m, e, r_val);
+        return vec4<f32>(raw_col, 1.0);
     }
 
     // Fallback (should never reach)

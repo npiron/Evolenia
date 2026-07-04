@@ -21,6 +21,18 @@ pub struct HudRenderer {
     pub text_renderer: TextRenderer,
 }
 
+/// Configuration for HUD text preparation.
+pub struct HudPrepareConfig<'a> {
+    pub device: &'a wgpu::Device,
+    pub queue: &'a wgpu::Queue,
+    pub params: &'a SimulationParams,
+    pub frame: u32,
+    pub fps: f32,
+    pub camera_zoom: f32,
+    pub win_w: u32,
+    pub win_h: u32,
+}
+
 impl HudRenderer {
     /// Initialize the HUD text rendering subsystem.
     pub fn new(
@@ -33,8 +45,12 @@ impl HudRenderer {
         let glyph_cache = GlyphCache::new(device);
         let glyph_viewport = GlyphViewport::new(device, &glyph_cache);
         let mut text_atlas = TextAtlas::new(device, queue, &glyph_cache, surface_format);
-        let text_renderer =
-            TextRenderer::new(&mut text_atlas, device, wgpu::MultisampleState::default(), None);
+        let text_renderer = TextRenderer::new(
+            &mut text_atlas,
+            device,
+            wgpu::MultisampleState::default(),
+            None,
+        );
 
         // Prime font system so first frame renders correctly
         let mut primer = TextBuffer::new(&mut font_system, Metrics::new(16.0, 20.0));
@@ -55,30 +71,25 @@ impl HudRenderer {
     }
 
     /// Prepare HUD text for the current frame.
-    pub fn prepare(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        params: &SimulationParams,
-        frame: u32,
-        fps: f32,
-        camera_zoom: f32,
-        win_w: u32,
-        win_h: u32,
-    ) {
+    /// Returns `true` if preparation succeeded (i.e., text is ready to render).
+    pub fn prepare(&mut self, config: &HudPrepareConfig<'_>) -> bool {
         self.glyph_viewport.update(
-            queue,
+            config.queue,
             Resolution {
-                width: win_w,
-                height: win_h,
+                width: config.win_w,
+                height: config.win_h,
             },
         );
 
-        let hud_text = build_hud_text(params, frame, fps, camera_zoom);
+        let hud_text = build_hud_text(config.params, config.frame, config.fps, config.camera_zoom);
 
         // Larger font for better readability (was 14.0/18.0)
         let mut text_buf = TextBuffer::new(&mut self.font_system, Metrics::new(18.0, 24.0));
-        text_buf.set_size(&mut self.font_system, Some(win_w as f32), Some(win_h as f32));
+        text_buf.set_size(
+            &mut self.font_system,
+            Some(config.win_w as f32),
+            Some(config.win_h as f32),
+        );
         text_buf.set_text(
             &mut self.font_system,
             &hud_text,
@@ -87,37 +98,45 @@ impl HudRenderer {
         );
         text_buf.shape_until_scroll(&mut self.font_system, false);
 
-        self.text_renderer
-            .prepare(
-                device,
-                queue,
-                &mut self.font_system,
-                &mut self.text_atlas,
-                &self.glyph_viewport,
-                [TextArea {
-                    buffer: &text_buf,
-                    left: 16.0,
-                    top: 16.0,
-                    scale: 1.0,
-                    bounds: TextBounds {
-                        left: 0,
-                        top: 0,
-                        right: win_w as i32,
-                        bottom: win_h as i32,
-                    },
-                    default_color: GlyphColor::rgb(220, 220, 220),
-                    custom_glyphs: &[],
-                }],
-                &mut self.swash_cache,
-            )
-            .unwrap();
+        match self.text_renderer.prepare(
+            config.device,
+            config.queue,
+            &mut self.font_system,
+            &mut self.text_atlas,
+            &self.glyph_viewport,
+            [TextArea {
+                buffer: &text_buf,
+                left: 16.0,
+                top: 16.0,
+                scale: 1.0,
+                bounds: TextBounds {
+                    left: 0,
+                    top: 0,
+                    right: config.win_w as i32,
+                    bottom: config.win_h as i32,
+                },
+                default_color: GlyphColor::rgb(220, 220, 220),
+                custom_glyphs: &[],
+            }],
+            &mut self.swash_cache,
+        ) {
+            Ok(()) => true,
+            Err(e) => {
+                log::warn!("HUD text preparation failed: {:?}", e);
+                false
+            }
+        }
     }
 
     /// Render HUD overlay into an active render pass.
+    /// Only call this after a successful `prepare()`.
     pub fn render<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
-        self.text_renderer
+        if let Err(e) = self
+            .text_renderer
             .render(&self.text_atlas, &self.glyph_viewport, pass)
-            .unwrap();
+        {
+            log::warn!("HUD render failed: {:?}", e);
+        }
     }
 
     /// Trim the glyph atlas after presenting.

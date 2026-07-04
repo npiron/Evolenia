@@ -5,8 +5,8 @@
 // ============================================================================
 
 use bytemuck::{Pod, Zeroable};
-use rand::Rng;
 use rand::seq::SliceRandom;
+use rand::Rng;
 use rand::SeedableRng;
 use wgpu::util::DeviceExt;
 
@@ -18,11 +18,11 @@ use crate::config::SimulationParams;
 // - 512×512 = 4× faster than 1024×1024 (good for development/testing)
 // - 1024×1024 = balanced (default, ~60 FPS on M1 Pro)
 // - 2048×2048 = highest quality (requires powerful GPU)
-pub const WORLD_WIDTH: u32 = 512;   // Try 512 for 4× speed boost
+pub const WORLD_WIDTH: u32 = 512; // Try 512 for 4× speed boost
 pub const WORLD_HEIGHT: u32 = 512;
 pub const WORKGROUP_X: u32 = 16;
 pub const WORKGROUP_Y: u32 = 16;
-pub const DT: f32 = 0.1;        // reduced for stability (was 0.1), try 0.1 for 2× speed
+pub const DT: f32 = 0.1; // reduced for stability (was 0.1), try 0.1 for 2× speed
 pub const TARGET_FILL: f32 = 0.15; // 15% initial mass fill
 
 pub fn total_pixels() -> u32 {
@@ -82,7 +82,7 @@ pub struct NormalizeParams {
     pub target_mass_x1000: u32,
     pub damping_x1000: u32,
     pub enabled: u32,
-    pub _pad1: u32,
+    pub dust_floor_x1000: u32, // mass below this is zeroed (×1000)
     pub _pad2: u32,
     pub _pad3: u32,
 }
@@ -145,10 +145,7 @@ pub struct WorldState {
 }
 
 impl WorldState {
-    pub fn new(device: &wgpu::Device) -> Self {
-        Self::new_with_config(device, None, &SimulationParams::default())
-    }
-
+    /// Create a new world with default seed and parameters.
     pub fn new_with_config(
         device: &wgpu::Device,
         seed: Option<u64>,
@@ -167,9 +164,9 @@ impl WorldState {
         // ---- Initialize data on CPU ----
         let mut mass_data = vec![0.0f32; n];
         let mut energy_data = vec![0.5f32; n]; // uniform initial energy
-        // CRITICAL: default genome must have valid values even for empty pixels.
-        // sigma=0 causes division by zero in the growth function (exp(-x²/2σ²)).
-        // Using safe defaults tuned for Lenia: r=10, mu=0.15, sigma=0.017, agg=0
+                                               // CRITICAL: default genome must have valid values even for empty pixels.
+                                               // sigma=0 causes division by zero in the growth function (exp(-x²/2σ²)).
+                                               // Using safe defaults tuned for Lenia: r=10, mu=0.15, sigma=0.017, agg=0
         let mut genome_a_data = vec![[10.0f32, 0.15, 0.017, 0.0]; n]; // [r, mu, sigma, agg]
         let mut genome_b_data = vec![0.003f32; n]; // default mutation rate
         let mut resource_data = vec![1.0f32; n]; // full nutrients everywhere
@@ -236,11 +233,22 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > radius { continue; }
+                    if dist > radius {
+                        continue;
+                    }
                     let falloff = (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
-                          idx, falloff, 0.5, genome, mut_rate);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        falloff,
+                        0.5,
+                        genome,
+                        mut_rate,
+                    );
                 }
             }
         }
@@ -259,15 +267,29 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > outer_r || dist < inner_r { continue; }
+                    if dist > outer_r || dist < inner_r {
+                        continue;
+                    }
                     // Smooth falloff at both edges
-                    let edge_outer = 1.0 - ((dist - outer_r + thickness * 0.3) / (thickness * 0.3)).max(0.0);
+                    let edge_outer =
+                        1.0 - ((dist - outer_r + thickness * 0.3) / (thickness * 0.3)).max(0.0);
                     let edge_inner = ((dist - inner_r) / (thickness * 0.3)).min(1.0);
                     let m = (edge_outer * edge_inner).clamp(0.0, 1.0);
-                    if m < 0.01 { continue; }
+                    if m < 0.01 {
+                        continue;
+                    }
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
-                          idx, m * 0.8, 0.6, genome, mut_rate);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        m * 0.8,
+                        0.6,
+                        genome,
+                        mut_rate,
+                    );
                 }
             }
         }
@@ -295,11 +317,22 @@ impl WorldState {
                 for dy in -hw..=hw {
                     for dx in -hw..=hw {
                         let d = ((dx * dx + dy * dy) as f32).sqrt();
-                        if d > half_width { continue; }
+                        if d > half_width {
+                            continue;
+                        }
                         let m = (1.0 - d / half_width).max(0.0);
                         let idx = pixel_idx(lx as i32 + dx, ly as i32 + dy);
-                        stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
-                              idx, m * 0.7, 0.5, genome, mut_rate);
+                        stamp(
+                            &mut mass_data,
+                            &mut energy_data,
+                            &mut genome_a_data,
+                            &mut genome_b_data,
+                            idx,
+                            m * 0.7,
+                            0.5,
+                            genome,
+                            mut_rate,
+                        );
                     }
                 }
             }
@@ -330,12 +363,25 @@ impl WorldState {
                     for dy in -hw..=hw {
                         for dx in -hw..=hw {
                             let d = ((dx * dx + dy * dy) as f32).sqrt();
-                            if d > arm_width { continue; }
+                            if d > arm_width {
+                                continue;
+                            }
                             let m = (1.0 - d / arm_width) * (1.0 - t * 0.3); // fade at tip
-                            if m < 0.01 { continue; }
+                            if m < 0.01 {
+                                continue;
+                            }
                             let idx = pixel_idx(sx as i32 + dx, sy as i32 + dy);
-                            stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
-                                  idx, m * 0.6, 0.55, genome, mut_rate);
+                            stamp(
+                                &mut mass_data,
+                                &mut energy_data,
+                                &mut genome_a_data,
+                                &mut genome_b_data,
+                                idx,
+                                m * 0.6,
+                                0.55,
+                                genome,
+                                mut_rate,
+                            );
                         }
                     }
                 }
@@ -354,14 +400,27 @@ impl WorldState {
             for dy in -patch_r..=patch_r {
                 for dx in -patch_r..=patch_r {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > patch_r as f32 { continue; }
+                    if dist > patch_r as f32 {
+                        continue;
+                    }
                     // Random sparse fill within patch
-                    if rng.gen::<f32>() > density { continue; }
+                    if rng.gen::<f32>() > density {
+                        continue;
+                    }
                     let falloff = 1.0 - dist / patch_r as f32;
                     let m = falloff * rng.gen_range(0.1..0.5);
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
-                          idx, m, 0.4, genome, mut_rate);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        m,
+                        0.4,
+                        genome,
+                        mut_rate,
+                    );
                 }
             }
         }
@@ -384,11 +443,22 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > radius { continue; }
+                    if dist > radius {
+                        continue;
+                    }
                     let m = (-dist * dist / (2.0 * radius * radius * 0.3)).exp();
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
-                          idx, m * 0.9, 0.8, genome, gene_mut);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        m * 0.9,
+                        0.8,
+                        genome,
+                        gene_mut,
+                    );
                 }
             }
         }
@@ -400,13 +470,13 @@ impl WorldState {
         // We seed several with slight variations to explore the attractor basin.
         let lenia_creatures: Vec<([f32; 4], f32, f32, &str)> = vec![
             // [r, mu, sigma, agg], mut_rate, pattern_radius, name
-            ([13.0, 0.15, 0.017, 0.0], 0.001, 13.0, "orbium"),       // classic orbium
-            ([13.0, 0.15, 0.017, 0.0], 0.001, 13.0, "orbium"),       // second orbium
-            ([13.0, 0.14, 0.014, 0.0], 0.001, 12.0, "geminium"),     // geminium (splits)
-            ([14.0, 0.20, 0.030, 0.0], 0.001, 14.0, "scutium"),      // scutium (shield)
+            ([13.0, 0.15, 0.017, 0.0], 0.001, 13.0, "orbium"), // classic orbium
+            ([13.0, 0.15, 0.017, 0.0], 0.001, 13.0, "orbium"), // second orbium
+            ([13.0, 0.14, 0.014, 0.0], 0.001, 12.0, "geminium"), // geminium (splits)
+            ([14.0, 0.20, 0.030, 0.0], 0.001, 14.0, "scutium"), // scutium (shield)
             ([10.0, 0.13, 0.012, 0.0], 0.002, 10.0, "small_orbium"), // compact orbium
-            ([12.0, 0.16, 0.020, 0.0], 0.001, 12.0, "orbium_var"),   // orbium variant
-            ([11.0, 0.18, 0.025, 0.0], 0.002, 11.0, "smooth_life"),  // smooth-life like
+            ([12.0, 0.16, 0.020, 0.0], 0.001, 12.0, "orbium_var"), // orbium variant
+            ([11.0, 0.18, 0.025, 0.0], 0.002, 11.0, "smooth_life"), // smooth-life like
             ([15.0, 0.12, 0.013, 0.0], 0.001, 15.0, "large_orbium"), // large slow orbium
         ];
 
@@ -431,14 +501,27 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > pr { continue; }
+                    if dist > pr {
+                        continue;
+                    }
                     let normalized = dist / pr;
                     let diff = normalized - 0.5;
                     let m = (-diff * diff / (2.0 * 0.15 * 0.15)).exp();
-                    if m < 0.01 { continue; }
+                    if m < 0.01 {
+                        continue;
+                    }
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
-                          idx, m * 0.85, 0.7, genome, mut_rate);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        m * 0.85,
+                        0.7,
+                        genome,
+                        mut_rate,
+                    );
                 }
             }
 
@@ -471,13 +554,26 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > blob_r { continue; }
+                    if dist > blob_r {
+                        continue;
+                    }
                     // Smooth Gaussian falloff
                     let m = (-dist * dist / (2.0 * blob_r * blob_r * 0.2)).exp();
-                    if m < 0.01 { continue; }
+                    if m < 0.01 {
+                        continue;
+                    }
                     let idx = pixel_idx(cx + dx, cy + dy);
-                    stamp(&mut mass_data, &mut energy_data, &mut genome_a_data, &mut genome_b_data,
-                          idx, m * 0.7, 0.6, genome, gene_mut);
+                    stamp(
+                        &mut mass_data,
+                        &mut energy_data,
+                        &mut genome_a_data,
+                        &mut genome_b_data,
+                        idx,
+                        m * 0.7,
+                        0.6,
+                        genome,
+                        gene_mut,
+                    );
                 }
             }
         }
@@ -499,7 +595,8 @@ impl WorldState {
         // - Gradient bands
 
         // Base: slightly reduced uniform nutrients
-        let base_resource = (0.45 + params.resource_feed_rate * 9.0 - params.resource_consumption * 1.8)
+        let base_resource = (0.45 + params.resource_feed_rate * 9.0
+            - params.resource_consumption * 1.8)
             .clamp(0.2, 0.9);
         for r in resource_data.iter_mut() {
             *r = base_resource;
@@ -516,8 +613,11 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > radius { continue; }
-                    let boost = oasis_boost_strength * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
+                    if dist > radius {
+                        continue;
+                    }
+                    let boost = oasis_boost_strength
+                        * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
                     let idx = pixel_idx(cx + dx, cy + dy);
                     resource_data[idx] = (resource_data[idx] + boost).min(1.0);
                 }
@@ -535,8 +635,11 @@ impl WorldState {
             for dy in -ir..=ir {
                 for dx in -ir..=ir {
                     let dist = ((dx * dx + dy * dy) as f32).sqrt();
-                    if dist > radius { continue; }
-                    let reduction = desert_strength * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
+                    if dist > radius {
+                        continue;
+                    }
+                    let reduction =
+                        desert_strength * (-dist * dist / (2.0 * radius * radius * 0.25)).exp();
                     let idx = pixel_idx(cx + dx, cy + dy);
                     resource_data[idx] = (resource_data[idx] - reduction).max(0.05);
                 }
@@ -556,7 +659,10 @@ impl WorldState {
         }
 
         // Flatten genome_a to f32 for bytemuck
-        let genome_a_flat: Vec<f32> = genome_a_data.iter().flat_map(|g| g.iter().copied()).collect();
+        let genome_a_flat: Vec<f32> = genome_a_data
+            .iter()
+            .flat_map(|g| g.iter().copied())
+            .collect();
 
         let usage = wgpu::BufferUsages::STORAGE
             | wgpu::BufferUsages::COPY_SRC
@@ -634,12 +740,11 @@ impl WorldState {
             frame: 0,
             _pad: 0,
         };
-        let velocity_params_buffer =
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("velocity_params"),
-                contents: bytemuck::bytes_of(&velocity_params),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        let velocity_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("velocity_params"),
+            contents: bytemuck::bytes_of(&velocity_params),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
 
         let resource_params = ResourceParams {
             width: WORLD_WIDTH,
@@ -651,12 +756,11 @@ impl WorldState {
             _pad2: 0,
             _pad3: 0,
         };
-        let resource_params_buffer =
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("resource_params"),
-                contents: bytemuck::bytes_of(&resource_params),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        let resource_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("resource_params"),
+            contents: bytemuck::bytes_of(&resource_params),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
 
         let normalize_params = NormalizeParams {
             width: WORLD_WIDTH,
@@ -664,7 +768,7 @@ impl WorldState {
             target_mass_x1000: (target_total_mass() * 1000.0) as u32,
             damping_x1000: 300,
             enabled: 1,
-            _pad1: 0,
+            dust_floor_x1000: 2, // mass < 0.002 → zeroed
             _pad2: 0,
             _pad3: 0,
         };
@@ -844,19 +948,32 @@ impl WorldState {
             _pad2: 0,
             _pad3: 0,
         };
-        queue.write_buffer(&self.resource_params_buffer, 0, bytemuck::bytes_of(&resource_params));
+        queue.write_buffer(
+            &self.resource_params_buffer,
+            0,
+            bytemuck::bytes_of(&resource_params),
+        );
 
         let normalize_params = NormalizeParams {
             width: WORLD_WIDTH,
             height: WORLD_HEIGHT,
-            target_mass_x1000: (target_total_mass() * params.target_mass_multiplier * 1000.0) as u32,
+            target_mass_x1000: (target_total_mass() * params.target_mass_multiplier * 1000.0)
+                as u32,
             damping_x1000: (params.mass_damping * 1000.0) as u32,
-            enabled: if params.mass_normalization_enabled { 1 } else { 0 },
-            _pad1: 0,
+            enabled: if params.mass_normalization_enabled {
+                1
+            } else {
+                0
+            },
+            dust_floor_x1000: 2, // mass < 0.002 → zeroed
             _pad2: 0,
             _pad3: 0,
         };
-        queue.write_buffer(&self.normalize_params_buffer, 0, bytemuck::bytes_of(&normalize_params));
+        queue.write_buffer(
+            &self.normalize_params_buffer,
+            0,
+            bytemuck::bytes_of(&normalize_params),
+        );
 
         // Reset mass_sum atomic to 0 before each normalization pass
         queue.write_buffer(&self.mass_sum, 0, bytemuck::bytes_of(&[0u32; 2]));
@@ -897,12 +1014,22 @@ impl WorldState {
                 // Toroidal distance
                 let mut dx = px as f32 - cx;
                 let mut dy = py as f32 - cy;
-                if dx > w * 0.5 { dx -= w; }
-                if dx < -w * 0.5 { dx += w; }
-                if dy > h * 0.5 { dy -= h; }
-                if dy < -h * 0.5 { dy += h; }
+                if dx > w * 0.5 {
+                    dx -= w;
+                }
+                if dx < -w * 0.5 {
+                    dx += w;
+                }
+                if dy > h * 0.5 {
+                    dy -= h;
+                }
+                if dy < -h * 0.5 {
+                    dy += h;
+                }
                 let dist = (dx * dx + dy * dy).sqrt();
-                if dist > radius { continue; }
+                if dist > radius {
+                    continue;
+                }
 
                 let falloff = 1.0 - dist / radius;
 
@@ -942,7 +1069,11 @@ impl WorldState {
 
         log::info!(
             "Perturbation applied: {:?} at ({:.0},{:.0}) r={:.0} i={:.2}",
-            params.perturbation_type, cx, cy, radius, intensity
+            params.perturbation_type,
+            cx,
+            cy,
+            radius,
+            intensity
         );
     }
 
@@ -963,7 +1094,13 @@ impl WorldState {
         });
         encoder.copy_buffer_to_buffer(&self.mass[cur], 0, &self.staging_mass, 0, n_bytes);
         encoder.copy_buffer_to_buffer(&self.energy[cur], 0, &self.staging_energy, 0, n_bytes);
-        encoder.copy_buffer_to_buffer(&self.genome_a[cur], 0, &self.staging_genome_a, 0, n_bytes * 4);
+        encoder.copy_buffer_to_buffer(
+            &self.genome_a[cur],
+            0,
+            &self.staging_genome_a,
+            0,
+            n_bytes * 4,
+        );
         encoder.copy_buffer_to_buffer(&self.genome_b[cur], 0, &self.staging_genome_b, 0, n_bytes);
         encoder.copy_buffer_to_buffer(&self.resource_map, 0, &self.staging_resource, 0, n_bytes);
         queue.submit(std::iter::once(encoder.finish()));
@@ -981,7 +1118,11 @@ impl WorldState {
             let floats: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
             drop(data);
             buf.unmap();
-            if floats.len() >= count { Some(floats) } else { None }
+            if floats.len() >= count {
+                Some(floats)
+            } else {
+                None
+            }
         };
 
         let mass = read_staging(&self.staging_mass, n)?;
@@ -990,6 +1131,12 @@ impl WorldState {
         let genome_b = read_staging(&self.staging_genome_b, n)?;
         let resource = read_staging(&self.staging_resource, n)?;
 
-        Some(BufferSnapshot { mass, energy, genome_a, genome_b, resource })
+        Some(BufferSnapshot {
+            mass,
+            energy,
+            genome_a,
+            genome_b,
+            resource,
+        })
     }
 }

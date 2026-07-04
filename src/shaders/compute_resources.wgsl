@@ -59,7 +59,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let feed          = params.feed_rate * (1.0 - r);
     let consumed      = r * m * params.consumption;
 
-    let r_new = clamp(r + diffusion + feed - consumed, 0.0, 1.0);
+    var r_new = r + diffusion + feed - consumed;
 
+    // NaN/Inf guard: reset to neutral resource level if corrupted
+    if (r_new != r_new || (r_new != 0.0 && r_new * 2.0 == r_new)) {
+        r_new = 0.5;
+    }
+
+    r_new = clamp(r_new, 0.0, 1.0);
     resource_map[i] = r_new;
 }

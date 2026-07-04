@@ -39,10 +39,26 @@ pub fn create_pipelines(
     surface_format: wgpu::TextureFormat,
 ) -> Pipelines {
     // ---- Load shaders ----
-    let velocity_shader = load_shader(device, "compute_velocity", include_str!("shaders/compute_velocity.wgsl"));
-    let evolution_shader = load_shader(device, "compute_evolution", include_str!("shaders/compute_evolution.wgsl"));
-    let resources_shader = load_shader(device, "compute_resources", include_str!("shaders/compute_resources.wgsl"));
-    let normalize_shader = load_shader(device, "normalize_mass", include_str!("shaders/normalize_mass.wgsl"));
+    let velocity_shader = load_shader(
+        device,
+        "compute_velocity",
+        include_str!("shaders/compute_velocity.wgsl"),
+    );
+    let evolution_shader = load_shader(
+        device,
+        "compute_evolution",
+        include_str!("shaders/compute_evolution.wgsl"),
+    );
+    let resources_shader = load_shader(
+        device,
+        "compute_resources",
+        include_str!("shaders/compute_resources.wgsl"),
+    );
+    let normalize_shader = load_shader(
+        device,
+        "normalize_mass",
+        include_str!("shaders/normalize_mass.wgsl"),
+    );
     let render_shader = load_shader(device, "render", include_str!("shaders/render.wgsl"));
 
     // ================================================================
@@ -59,7 +75,8 @@ pub fn create_pipelines(
         ],
     });
 
-    let velocity_pipeline = create_compute_pipeline(device, "velocity", &velocity_bgl, &velocity_shader, "main");
+    let velocity_pipeline =
+        create_compute_pipeline(device, "velocity", &velocity_bgl, &velocity_shader, "main");
 
     let velocity_bind_groups = [
         device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -106,7 +123,13 @@ pub fn create_pipelines(
         ],
     });
 
-    let evolution_pipeline = create_compute_pipeline(device, "evolution", &evolution_bgl, &evolution_shader, "main");
+    let evolution_pipeline = create_compute_pipeline(
+        device,
+        "evolution",
+        &evolution_bgl,
+        &evolution_shader,
+        "main",
+    );
 
     let evolution_bind_groups = [
         // cur=0: read [0], write [1]
@@ -152,14 +175,16 @@ pub fn create_pipelines(
     // ================================================================
     let resources_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("resources_bgl"),
-        entries: &[
-            bgl_uniform(0),
-            bgl_storage_ro(1),
-            bgl_storage_rw(2),
-        ],
+        entries: &[bgl_uniform(0), bgl_storage_ro(1), bgl_storage_rw(2)],
     });
 
-    let resources_pipeline = create_compute_pipeline(device, "resources", &resources_bgl, &resources_shader, "main");
+    let resources_pipeline = create_compute_pipeline(
+        device,
+        "resources",
+        &resources_bgl,
+        &resources_shader,
+        "main",
+    );
 
     // After evolution, the "next" buffer has new mass.
     // cur=0 → evolution wrote to [1], so resources reads [1]
@@ -189,11 +214,7 @@ pub fn create_pipelines(
     // ================================================================
     let normalize_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("normalize_bgl"),
-        entries: &[
-            bgl_uniform(0),
-            bgl_storage_rw(1),
-            bgl_storage_rw(2),
-        ],
+        entries: &[bgl_uniform(0), bgl_storage_rw(1), bgl_storage_rw(2)],
     });
 
     let normalize_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

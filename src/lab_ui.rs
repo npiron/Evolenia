@@ -14,11 +14,7 @@ use crate::lab::LabState;
 use crate::world::{target_total_mass, WORLD_HEIGHT, WORLD_WIDTH};
 
 /// Main entry point for rendering all Research Lab UI panels.
-pub fn render_lab_ui(
-    ctx: &egui::Context,
-    params: &mut SimulationParams,
-    lab: &mut LabState,
-) {
+pub fn render_lab_ui(ctx: &egui::Context, params: &mut SimulationParams, lab: &mut LabState) {
     if !lab.show_lab_ui {
         // Minimal overlay when UI is hidden
         render_minimal_overlay(ctx, params, lab);
@@ -41,46 +37,78 @@ pub fn render_lab_ui(
 
 // ======================== Live Dashboard ========================
 
-fn render_dashboard(
-    ui: &mut egui::Ui,
-    params: &mut SimulationParams,
-    lab: &mut LabState,
-) {
+fn render_dashboard(ui: &mut egui::Ui, params: &mut SimulationParams, lab: &mut LabState) {
     let frame = lab.metrics_history.last().map_or(0, |m| m.frame);
     let fps = lab.metrics_history.last().map_or(0.0, |m| m.fps);
     let species = lab.metrics_history.last().map_or(0, |m| m.species);
-    let live_frac = lab.metrics_history.last().map_or(0.0, |m| m.live_fraction * 100.0);
-    let predator_frac = lab.metrics_history.last().map_or(0.0, |m| m.predator_fraction * 100.0);
+    let live_frac = lab
+        .metrics_history
+        .last()
+        .map_or(0.0, |m| m.live_fraction * 100.0);
+    let predator_frac = lab
+        .metrics_history
+        .last()
+        .map_or(0.0, |m| m.predator_fraction * 100.0);
 
     egui::Frame::new()
         .fill(egui::Color32::from_rgb(24, 28, 38))
         .corner_radius(8)
         .inner_margin(egui::Margin::symmetric(12, 10))
-        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(60, 100, 160)))
+        .stroke(egui::Stroke::new(
+            1.0,
+            egui::Color32::from_rgb(60, 100, 160),
+        ))
         .show(ui, |ui| {
             // Row 1: Key stats
             ui.horizontal(|ui| {
-                dashboard_stat(ui, "🕐 Frame", &format!("{}", frame), egui::Color32::from_rgb(120, 220, 160));
+                dashboard_stat(
+                    ui,
+                    "🕐 Frame",
+                    &format!("{}", frame),
+                    egui::Color32::from_rgb(120, 220, 160),
+                );
                 ui.separator();
-                dashboard_stat(ui, "⚡ FPS", &format!("{:.0}", fps), egui::Color32::from_rgb(255, 200, 100));
+                dashboard_stat(
+                    ui,
+                    "⚡ FPS",
+                    &format!("{:.0}", fps),
+                    egui::Color32::from_rgb(255, 200, 100),
+                );
                 ui.separator();
-                dashboard_stat(ui, "🧬 Sp.", &format!("{}", species), egui::Color32::from_rgb(200, 150, 255));
+                dashboard_stat(
+                    ui,
+                    "🧬 Sp.",
+                    &format!("{}", species),
+                    egui::Color32::from_rgb(200, 150, 255),
+                );
             });
             ui.add_space(6.0);
 
             // Row 2: Gauges
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Vie").size(11.0).color(egui::Color32::from_rgb(140, 150, 170)));
-                ui.add(egui::ProgressBar::new(live_frac as f32 / 100.0)
-                    .desired_width(80.0)
-                    .text(format!("{:.0}%", live_frac))
-                    .fill(egui::Color32::from_rgb(100, 220, 140)));
+                ui.label(
+                    egui::RichText::new("Vie")
+                        .size(11.0)
+                        .color(egui::Color32::from_rgb(140, 150, 170)),
+                );
+                ui.add(
+                    egui::ProgressBar::new(live_frac / 100.0)
+                        .desired_width(80.0)
+                        .text(format!("{:.0}%", live_frac))
+                        .fill(egui::Color32::from_rgb(100, 220, 140)),
+                );
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new("Prédateurs").size(11.0).color(egui::Color32::from_rgb(140, 150, 170)));
-                ui.add(egui::ProgressBar::new(predator_frac as f32 / 100.0)
-                    .desired_width(80.0)
-                    .text(format!("{:.0}%", predator_frac))
-                    .fill(egui::Color32::from_rgb(255, 130, 100)));
+                ui.label(
+                    egui::RichText::new("Prédateurs")
+                        .size(11.0)
+                        .color(egui::Color32::from_rgb(140, 150, 170)),
+                );
+                ui.add(
+                    egui::ProgressBar::new(predator_frac / 100.0)
+                        .desired_width(80.0)
+                        .text(format!("{:.0}%", predator_frac))
+                        .fill(egui::Color32::from_rgb(255, 130, 100)),
+                );
             });
 
             ui.add_space(8.0);
@@ -94,27 +122,45 @@ fn render_dashboard(
                 } else {
                     ("⏸ Pause", egui::Color32::from_rgb(220, 150, 50))
                 };
-                let play_btn = egui::Button::new(
-                    egui::RichText::new(btn_text).strong().size(14.0)
-                ).fill(btn_color).min_size(egui::vec2(75.0, 28.0));
-                if ui.add(play_btn).on_hover_text("Pause/Play (Space)").clicked() {
+                let play_btn = egui::Button::new(egui::RichText::new(btn_text).strong().size(14.0))
+                    .fill(btn_color)
+                    .min_size(egui::vec2(75.0, 28.0));
+                if ui
+                    .add(play_btn)
+                    .on_hover_text("Pause/Play (Space)")
+                    .clicked()
+                {
                     params.paused = !params.paused;
-                    lab.log_event(0, "CONTROL", if params.paused { "Paused" } else { "Resumed" });
+                    lab.log_event(
+                        0,
+                        "CONTROL",
+                        if params.paused { "Paused" } else { "Resumed" },
+                    );
                 }
-                if ui.add(egui::Button::new("⏭").min_size(egui::vec2(28.0, 28.0)))
-                    .on_hover_text("Step one frame (while paused)").clicked() {
+                if ui
+                    .add(egui::Button::new("⏭").min_size(egui::vec2(28.0, 28.0)))
+                    .on_hover_text("Step one frame (while paused)")
+                    .clicked()
+                {
                     lab.step_requested = true;
                     params.paused = true;
                 }
-                if ui.add(egui::Button::new("🔄").min_size(egui::vec2(28.0, 28.0)))
-                    .on_hover_text("Restart simulation with current params").clicked() {
+                if ui
+                    .add(egui::Button::new("🔄").min_size(egui::vec2(28.0, 28.0)))
+                    .on_hover_text("Restart simulation with current params")
+                    .clicked()
+                {
                     lab.restart_requested = true;
                 }
             });
 
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Vitesse").size(12.0).color(egui::Color32::from_rgb(160, 170, 190)));
+                ui.label(
+                    egui::RichText::new("Vitesse")
+                        .size(12.0)
+                        .color(egui::Color32::from_rgb(160, 170, 190)),
+                );
                 let speed_slider = egui::Slider::new(&mut params.simulation_speed, 1..=20)
                     .text("×")
                     .step_by(1.0);
@@ -125,36 +171,36 @@ fn render_dashboard(
 
 fn dashboard_stat(ui: &mut egui::Ui, label: &str, value: &str, color: egui::Color32) {
     ui.vertical(|ui| {
-        ui.label(egui::RichText::new(label).size(10.0).color(egui::Color32::from_rgb(130, 140, 160)));
+        ui.label(
+            egui::RichText::new(label)
+                .size(10.0)
+                .color(egui::Color32::from_rgb(130, 140, 160)),
+        );
         ui.label(egui::RichText::new(value).size(16.0).strong().color(color));
     });
 }
 
 // ======================== Minimal Overlay ========================
 
-fn render_minimal_overlay(
-    ctx: &egui::Context,
-    params: &SimulationParams,
-    lab: &mut LabState,
-) {
+fn render_minimal_overlay(ctx: &egui::Context, params: &SimulationParams, lab: &mut LabState) {
     egui::Area::new(egui::Id::new("minimal_overlay"))
         .fixed_pos(egui::pos2(16.0, 16.0))
         .show(ctx, |ui| {
             egui::Frame::new()
-                .fill(egui::Color32::from_rgb(18, 22, 32))  // Opaque background
+                .fill(egui::Color32::from_rgb(18, 22, 32)) // Opaque background
                 .corner_radius(10)
                 .inner_margin(egui::Margin::symmetric(18, 14))
-                .stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(60, 130, 200)))
+                .stroke(egui::Stroke::new(
+                    2.0,
+                    egui::Color32::from_rgb(60, 130, 200),
+                ))
                 .show(ui, |ui| {
                     let _pause_str = if params.paused { "  ⏸ PAUSED" } else { "" };
                     let frame = lab.metrics_history.last().map_or(0, |m| m.frame);
                     let fps = lab.metrics_history.last().map_or(0.0, |m| m.fps);
-                    
+
                     ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new("🌌")
-                                .size(24.0),
-                        );
+                        ui.label(egui::RichText::new("🌌").size(24.0));
                         ui.add_space(8.0);
                         ui.label(
                             egui::RichText::new("EvoLenia")
@@ -192,12 +238,14 @@ fn render_minimal_overlay(
                             );
                         }
                     });
-                    
+
                     ui.add_space(6.0);
                     ui.label(
-                        egui::RichText::new("F1 → Research Lab  •  Space → Pause  •  WASD → Pan  •  Q/E → Zoom")
-                            .size(12.0)
-                            .color(egui::Color32::from_rgb(130, 140, 160)),
+                        egui::RichText::new(
+                            "F1 → Research Lab  •  Space → Pause  •  WASD → Pan  •  Q/E → Zoom",
+                        )
+                        .size(12.0)
+                        .color(egui::Color32::from_rgb(130, 140, 160)),
                     );
                 });
         });
@@ -205,11 +253,7 @@ fn render_minimal_overlay(
 
 // ======================== Left Panel ========================
 
-fn render_left_panel(
-    ctx: &egui::Context,
-    params: &mut SimulationParams,
-    lab: &mut LabState,
-) {
+fn render_left_panel(ctx: &egui::Context, params: &mut SimulationParams, lab: &mut LabState) {
     egui::SidePanel::left("lab_panel")
         .default_width(340.0)
         .min_width(300.0)
@@ -218,9 +262,18 @@ fn render_left_panel(
             // ── HEADER ──
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("🔬 EvoLenia").size(20.0).strong().color(egui::Color32::from_rgb(100, 200, 255)));
+                ui.label(
+                    egui::RichText::new("🔬 EvoLenia")
+                        .size(20.0)
+                        .strong()
+                        .color(egui::Color32::from_rgb(100, 200, 255)),
+                );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("✕").on_hover_text("Hide Lab UI (F1)").clicked() {
+                    if ui
+                        .small_button("✕")
+                        .on_hover_text("Hide Lab UI (F1)")
+                        .clicked()
+                    {
                         lab.show_lab_ui = false;
                     }
                 });
@@ -253,32 +306,42 @@ fn render_left_panel(
 
 // ======================== Control Section ========================
 
-fn render_control_section(
-    ui: &mut egui::Ui,
-    params: &mut SimulationParams,
-    lab: &mut LabState,
-) {
+fn render_control_section(ui: &mut egui::Ui, params: &mut SimulationParams, lab: &mut LabState) {
     egui::CollapsingHeader::new("⏱ Time & Speed")
         .default_open(false)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Time Step:");
-                if ui.add(egui::Slider::new(&mut params.time_step, TIME_STEP_MIN..=TIME_STEP_MAX)
-                    .step_by(0.05)
-                    .text("dt"))
-                    .on_hover_text("Simulation time step — smaller = more stable but slower evolution")
-                    .changed() {
-                    lab.log_event(0, "PARAM_CHANGE", &format!("time_step={:.2}", params.time_step));
+                if ui
+                    .add(
+                        egui::Slider::new(&mut params.time_step, TIME_STEP_MIN..=TIME_STEP_MAX)
+                            .step_by(0.05)
+                            .text("dt"),
+                    )
+                    .on_hover_text(
+                        "Simulation time step — smaller = more stable but slower evolution",
+                    )
+                    .changed()
+                {
+                    lab.log_event(
+                        0,
+                        "PARAM_CHANGE",
+                        &format!("time_step={:.2}", params.time_step),
+                    );
                 }
             });
 
             ui.horizontal(|ui| {
                 ui.label("Analyse tous les:");
-                ui.add(egui::DragValue::new(&mut lab.metrics_sample_interval)
-                    .range(10..=5000)
-                    .suffix(" frames")
-                    .speed(10));
-            }).response.on_hover_text("How often to read back metrics from GPU");
+                ui.add(
+                    egui::DragValue::new(&mut lab.metrics_sample_interval)
+                        .range(10..=5000)
+                        .suffix(" frames")
+                        .speed(10),
+                );
+            })
+            .response
+            .on_hover_text("How often to read back metrics from GPU");
 
             ui.add_space(2.0);
             ui.label(
@@ -295,11 +358,7 @@ fn render_control_section(
 
 // ======================== Parameters Section ========================
 
-fn render_params_section(
-    ui: &mut egui::Ui,
-    params: &mut SimulationParams,
-    lab: &mut LabState,
-) {
+fn render_params_section(ui: &mut egui::Ui, params: &mut SimulationParams, lab: &mut LabState) {
     egui::CollapsingHeader::new("🧬 Paramètres avancés")
         .default_open(false)
         .show(ui, |ui| {
@@ -466,20 +525,30 @@ fn render_perturbation_section(
                 egui::Slider::new(&mut params.perturbation_intensity, 0.0..=1.0)
                     .text("Intensité")
                     .step_by(0.05),
-            ).on_hover_text("Force de la perturbation");
+            )
+            .on_hover_text("Force de la perturbation");
 
             ui.add(
                 egui::Slider::new(&mut params.perturbation_radius, 0.05..=0.5)
                     .text("Rayon")
                     .step_by(0.01),
-            ).on_hover_text("Taille de la zone affectée (fraction du monde)");
+            )
+            .on_hover_text("Taille de la zone affectée (fraction du monde)");
 
             ui.horizontal(|ui| {
                 ui.label("Centre:");
-                ui.add(egui::DragValue::new(&mut params.perturbation_center_x)
-                    .range(0.0..=1.0).speed(0.01).prefix("x="));
-                ui.add(egui::DragValue::new(&mut params.perturbation_center_y)
-                    .range(0.0..=1.0).speed(0.01).prefix("y="));
+                ui.add(
+                    egui::DragValue::new(&mut params.perturbation_center_x)
+                        .range(0.0..=1.0)
+                        .speed(0.01)
+                        .prefix("x="),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut params.perturbation_center_y)
+                        .range(0.0..=1.0)
+                        .speed(0.01)
+                        .prefix("y="),
+                );
             });
 
             ui.add_space(4.0);
@@ -504,15 +573,24 @@ fn render_perturbation_section(
             ui.add_enabled_ui(can_apply, |ui| {
                 if ui.button("⚡ Appliquer").clicked() {
                     params.perturbation_active = true;
-                    lab.log_event(0, "PERTURBATION", &format!(
-                        "{} intensity={:.2} radius={:.2}", params.perturbation_type.name(),
-                        params.perturbation_intensity, params.perturbation_radius,
-                    ));
+                    lab.log_event(
+                        0,
+                        "PERTURBATION",
+                        &format!(
+                            "{} intensity={:.2} radius={:.2}",
+                            params.perturbation_type.name(),
+                            params.perturbation_intensity,
+                            params.perturbation_radius,
+                        ),
+                    );
                 }
             });
 
             if params.perturbation_active {
-                ui.label(egui::RichText::new("● En attente…").color(egui::Color32::from_rgb(255, 200, 50)));
+                ui.label(
+                    egui::RichText::new("● En attente…")
+                        .color(egui::Color32::from_rgb(255, 200, 50)),
+                );
             }
         });
 }
@@ -525,13 +603,17 @@ fn render_visualization_section(ui: &mut egui::Ui, params: &mut SimulationParams
         .show(ui, |ui| {
             for mode in 0..VIS_MODE_COUNT {
                 let name = visualization_mode_name(mode);
-                if ui.radio_value(&mut params.visualization_mode, mode, name).clicked() {
+                if ui
+                    .radio_value(&mut params.visualization_mode, mode, name)
+                    .clicked()
+                {
                     log::info!("Visualization mode: {}", name);
                 }
             }
             ui.add_space(4.0);
-            ui.checkbox(&mut params.vsync, "VSync")
-                .on_hover_text("Active la synchronisation verticale (limite FPS au rafraîchissement écran)");
+            ui.checkbox(&mut params.vsync, "VSync").on_hover_text(
+                "Active la synchronisation verticale (limite FPS au rafraîchissement écran)",
+            );
 
             ui.label(
                 egui::RichText::new(format!("Monde: {}×{}", WORLD_WIDTH, WORLD_HEIGHT))
@@ -543,240 +625,251 @@ fn render_visualization_section(ui: &mut egui::Ui, params: &mut SimulationParams
 
 // ======================== Experiment Section ========================
 
-fn render_experiment_section(
-    ui: &mut egui::Ui,
-    params: &mut SimulationParams,
-    lab: &mut LabState,
-) {
+fn render_experiment_section(ui: &mut egui::Ui, params: &mut SimulationParams, lab: &mut LabState) {
     egui::CollapsingHeader::new("🧪 Expériences")
         .default_open(false)
         .show(ui, |ui| {
-        // Seed control
-        ui.group(|ui| {
-            ui.label(egui::RichText::new("Reproducibility").strong());
-            ui.checkbox(&mut params.use_fixed_seed, "Use fixed seed");
-            if params.use_fixed_seed {
+            // Seed control
+            ui.group(|ui| {
+                ui.label(egui::RichText::new("Reproducibility").strong());
+                ui.checkbox(&mut params.use_fixed_seed, "Use fixed seed");
+                if params.use_fixed_seed {
+                    ui.horizontal(|ui| {
+                        ui.label("Seed:");
+                        ui.add(
+                            egui::DragValue::new(&mut params.fixed_seed_value).range(0..=u64::MAX),
+                        );
+                    });
+                }
+                if let Some(seed) = params.effective_seed() {
+                    ui.label(
+                        egui::RichText::new(format!("Active seed: {}", seed))
+                            .small()
+                            .color(egui::Color32::from_rgb(150, 200, 150)),
+                    );
+                }
+            });
+
+            // Run management
+            ui.group(|ui| {
+                ui.label(egui::RichText::new("Run Management").strong());
+                ui.label(format!("Run ID: {}", lab.run_id));
+
                 ui.horizontal(|ui| {
-                    ui.label("Seed:");
-                    ui.add(egui::DragValue::new(&mut params.fixed_seed_value).range(0..=u64::MAX));
-                });
-            }
-            if let Some(seed) = params.effective_seed() {
-                ui.label(
-                    egui::RichText::new(format!("Active seed: {}", seed))
-                        .small()
-                        .color(egui::Color32::from_rgb(150, 200, 150)),
-                );
-            }
-        });
-
-        // Run management
-        ui.group(|ui| {
-            ui.label(egui::RichText::new("Run Management").strong());
-            ui.label(format!("Run ID: {}", lab.run_id));
-
-            ui.horizontal(|ui| {
-                if ui.button("📁 Start Run").clicked() {
-                    lab.start_run(params);
-                }
-                if ui.button("⏹ Finalize Run").clicked() {
-                    lab.finalize_run(params);
-                }
-            });
-
-            if lab.run_active {
-                ui.label(
-                    egui::RichText::new("● Recording")
-                        .color(egui::Color32::from_rgb(100, 255, 100)),
-                );
-            }
-
-            ui.label(format!("Metrics: {} samples", lab.metrics_history.len()));
-        });
-
-        // Presets - Full Selector System
-        ui.group(|ui| {
-            ui.label(egui::RichText::new("🎛️ Preset Selector").strong().size(14.0));
-            ui.add_space(4.0);
-
-            let catalog = preset_catalog();
-            let categories = preset_categories();
-            
-            // Category tabs
-            ui.horizontal_wrapped(|ui| {
-                for (cat_idx, cat) in categories.iter().enumerate() {
-                    let cat_emoji = match *cat {
-                        "Autonomous" => "🛸",
-                        "Predation" => "🦁",
-                        "Explosive" => "💥",
-                        "Stable" => "🪷",
-                        "Special" => "✨",
-                        "Experimental" => "🧬",
-                        _ => "📁",
-                    };
-                    
-                    // Count presets in this category
-                    let first_in_cat = catalog.iter().position(|p| p.category == *cat).unwrap_or(0);
-                    
-                    let is_selected = catalog.get(lab.selected_preset_index)
-                        .map(|p| p.category == *cat)
-                        .unwrap_or(cat_idx == 0);
-                    
-                    let btn = egui::Button::new(format!("{} {}", cat_emoji, cat))
-                        .fill(if is_selected {
-                            egui::Color32::from_rgb(60, 100, 160)
-                        } else {
-                            egui::Color32::from_rgb(40, 45, 55)
-                        });
-                    
-                    if ui.add(btn).clicked() {
-                        lab.selected_preset_index = first_in_cat;
+                    if ui.button("📁 Start Run").clicked() {
+                        lab.start_run(params);
                     }
+                    if ui.button("⏹ Finalize Run").clicked() {
+                        lab.finalize_run(params);
+                    }
+                });
+
+                if lab.run_active {
+                    ui.label(
+                        egui::RichText::new("● Recording")
+                            .color(egui::Color32::from_rgb(100, 255, 100)),
+                    );
                 }
+
+                ui.label(format!("Metrics: {} samples", lab.metrics_history.len()));
             });
-            
-            ui.add_space(6.0);
-            ui.separator();
-            ui.add_space(4.0);
-            
-            // Preset list for selected category
-            let current_cat = catalog.get(lab.selected_preset_index)
-                .map(|p| p.category)
-                .unwrap_or("Autonomous");
-            
-            let cat_presets: Vec<(usize, &PresetInfo)> = catalog.iter()
-                .enumerate()
-                .filter(|(_, p)| p.category == current_cat)
-                .collect();
-            
-            egui::ScrollArea::vertical()
-                .max_height(180.0)
-                .show(ui, |ui| {
-                    for (idx, preset) in cat_presets {
-                        let is_selected = idx == lab.selected_preset_index;
-                        
-                        ui.horizontal(|ui| {
-                            let btn_color = if is_selected {
-                                egui::Color32::from_rgb(80, 140, 200)
+
+            // Presets - Full Selector System
+            ui.group(|ui| {
+                ui.label(
+                    egui::RichText::new("🎛️ Preset Selector")
+                        .strong()
+                        .size(14.0),
+                );
+                ui.add_space(4.0);
+
+                let catalog = preset_catalog();
+                let categories = preset_categories();
+
+                // Category tabs
+                ui.horizontal_wrapped(|ui| {
+                    for (cat_idx, cat) in categories.iter().enumerate() {
+                        let cat_emoji = match *cat {
+                            "Autonomous" => "🛸",
+                            "Predation" => "🦁",
+                            "Explosive" => "💥",
+                            "Stable" => "🪷",
+                            "Special" => "✨",
+                            "Experimental" => "🧬",
+                            _ => "📁",
+                        };
+
+                        // Count presets in this category
+                        let first_in_cat =
+                            catalog.iter().position(|p| p.category == *cat).unwrap_or(0);
+
+                        let is_selected = catalog
+                            .get(lab.selected_preset_index)
+                            .map(|p| p.category == *cat)
+                            .unwrap_or(cat_idx == 0);
+
+                        let btn = egui::Button::new(format!("{} {}", cat_emoji, cat)).fill(
+                            if is_selected {
+                                egui::Color32::from_rgb(60, 100, 160)
                             } else {
-                                egui::Color32::from_rgb(50, 55, 65)
-                            };
-                            
-                            let btn = egui::Button::new(format!("{} {}", preset.emoji, preset.name))
-                                .fill(btn_color)
-                                .min_size(egui::vec2(140.0, 24.0));
-                            
-                            if ui.add(btn).clicked() {
-                                lab.selected_preset_index = idx;
-                            }
-                        });
-                        
-                        if is_selected {
-                            ui.indent("desc", |ui| {
-                                ui.label(
-                                    egui::RichText::new(preset.description)
-                                        .small()
-                                        .color(egui::Color32::from_rgb(180, 180, 200))
-                                );
+                                egui::Color32::from_rgb(40, 45, 55)
+                            },
+                        );
+
+                        if ui.add(btn).clicked() {
+                            lab.selected_preset_index = first_in_cat;
+                        }
+                    }
+                });
+
+                ui.add_space(6.0);
+                ui.separator();
+                ui.add_space(4.0);
+
+                // Preset list for selected category
+                let current_cat = catalog
+                    .get(lab.selected_preset_index)
+                    .map(|p| p.category)
+                    .unwrap_or("Autonomous");
+
+                let cat_presets: Vec<(usize, &PresetInfo)> = catalog
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| p.category == current_cat)
+                    .collect();
+
+                egui::ScrollArea::vertical()
+                    .max_height(180.0)
+                    .show(ui, |ui| {
+                        for (idx, preset) in cat_presets {
+                            let is_selected = idx == lab.selected_preset_index;
+
+                            ui.horizontal(|ui| {
+                                let btn_color = if is_selected {
+                                    egui::Color32::from_rgb(80, 140, 200)
+                                } else {
+                                    egui::Color32::from_rgb(50, 55, 65)
+                                };
+
+                                let btn =
+                                    egui::Button::new(format!("{} {}", preset.emoji, preset.name))
+                                        .fill(btn_color)
+                                        .min_size(egui::vec2(140.0, 24.0));
+
+                                if ui.add(btn).clicked() {
+                                    lab.selected_preset_index = idx;
+                                }
                             });
-                            ui.add_space(4.0);
+
+                            if is_selected {
+                                ui.indent("desc", |ui| {
+                                    ui.label(
+                                        egui::RichText::new(preset.description)
+                                            .small()
+                                            .color(egui::Color32::from_rgb(180, 180, 200)),
+                                    );
+                                });
+                                ui.add_space(4.0);
+                            }
+                        }
+                    });
+
+                ui.add_space(6.0);
+                ui.separator();
+                ui.add_space(4.0);
+
+                // Action buttons
+                ui.horizontal(|ui| {
+                    if ui.button("▶️ Apply & Restart").clicked() {
+                        if let Some(preset) = catalog.get(lab.selected_preset_index) {
+                            let vis = params.visualization_mode; // Keep current view
+                            *params = (preset.params)();
+                            params.visualization_mode = vis;
+                            lab.restart_requested = true;
+                            lab.set_status(format!("{} {} applied!", preset.emoji, preset.name));
+                        }
+                    }
+
+                    if ui.button("📋 Apply Only").clicked() {
+                        if let Some(preset) = catalog.get(lab.selected_preset_index) {
+                            let vis = params.visualization_mode;
+                            *params = (preset.params)();
+                            params.visualization_mode = vis;
+                            lab.set_status(format!(
+                                "{} {} params set (no restart)",
+                                preset.emoji, preset.name
+                            ));
                         }
                     }
                 });
-            
-            ui.add_space(6.0);
-            ui.separator();
-            ui.add_space(4.0);
-            
-            // Action buttons
-            ui.horizontal(|ui| {
-                if ui.button("▶️ Apply & Restart").clicked() {
-                    if let Some(preset) = catalog.get(lab.selected_preset_index) {
-                        let vis = params.visualization_mode; // Keep current view
-                        *params = (preset.params)();
-                        params.visualization_mode = vis;
-                        lab.restart_requested = true;
-                        lab.set_status(format!("{} {} applied!", preset.emoji, preset.name));
-                    }
-                }
-                
-                if ui.button("📋 Apply Only").clicked() {
-                    if let Some(preset) = catalog.get(lab.selected_preset_index) {
-                        let vis = params.visualization_mode;
-                        *params = (preset.params)();
-                        params.visualization_mode = vis;
-                        lab.set_status(format!("{} {} params set (no restart)", preset.emoji, preset.name));
-                    }
-                }
-            });
-            
-            ui.add_space(4.0);
-            
-            // Custom preset save/load
-            ui.collapsing("💾 Custom Presets", |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Name:");
-                    ui.text_edit_singleline(&mut lab.preset_name);
-                });
-                ui.horizontal(|ui| {
-                    if ui.button("Save").clicked() {
-                        save_preset(&lab.preset_name, params);
-                        lab.set_status(format!("Preset '{}' saved to disk", lab.preset_name));
-                    }
-                    if ui.button("Load").clicked() {
-                        if let Some(loaded) = load_preset(&lab.preset_name) {
-                            *params = loaded;
-                            lab.set_status(format!("Preset '{}' loaded", lab.preset_name));
-                        } else {
-                            lab.set_status(format!("Preset '{}' not found", lab.preset_name));
+
+                ui.add_space(4.0);
+
+                // Custom preset save/load
+                ui.collapsing("💾 Custom Presets", |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Name:");
+                        ui.text_edit_singleline(&mut lab.preset_name);
+                    });
+                    ui.horizontal(|ui| {
+                        if ui.button("Save").clicked() {
+                            save_preset(&lab.preset_name, params);
+                            lab.set_status(format!("Preset '{}' saved to disk", lab.preset_name));
                         }
-                    }
+                        if ui.button("Load").clicked() {
+                            if let Some(loaded) = load_preset(&lab.preset_name) {
+                                *params = loaded;
+                                lab.set_status(format!("Preset '{}' loaded", lab.preset_name));
+                            } else {
+                                lab.set_status(format!("Preset '{}' not found", lab.preset_name));
+                            }
+                        }
+                    });
                 });
+
+                if ui.button("🔄 Reset to defaults").clicked() {
+                    let vis = params.visualization_mode;
+                    *params = SimulationParams::default();
+                    params.visualization_mode = vis;
+                    lab.set_status("Parameters reset to defaults".to_string());
+                }
             });
-            
-            if ui.button("🔄 Reset to defaults").clicked() {
-                let vis = params.visualization_mode;
-                *params = SimulationParams::default();
-                params.visualization_mode = vis;
-                lab.set_status("Parameters reset to defaults".to_string());
-            }
         });
-    });
 }
 
 // ======================== Capture Section ========================
 
-fn render_capture_section(
-    ui: &mut egui::Ui,
-    params: &SimulationParams,
-    lab: &mut LabState,
-) {
+fn render_capture_section(ui: &mut egui::Ui, params: &SimulationParams, lab: &mut LabState) {
     egui::CollapsingHeader::new("📸 Capture & Export")
         .default_open(false)
         .show(ui, |ui| {
-        ui.horizontal(|ui| {
-            if ui.button("📷 Screenshot (F12)").clicked() {
-                lab.screenshot_requested = true;
-            }
-            if ui.button("💾 Snapshot").clicked() {
-                lab.snapshot_requested = true;
-            }
-        }).response.on_hover_text("Screenshot = image PNG | Snapshot = état complet de la simulation (.snap)");
+            ui.horizontal(|ui| {
+                if ui.button("📷 Screenshot (F12)").clicked() {
+                    lab.screenshot_requested = true;
+                }
+                if ui.button("💾 Snapshot").clicked() {
+                    lab.snapshot_requested = true;
+                }
+            })
+            .response
+            .on_hover_text(
+                "Screenshot = image PNG | Snapshot = état complet de la simulation (.snap)",
+            );
 
-        if ui.button("📊 Export Metrics CSV").clicked() {
-            match lab.export_metrics_csv() {
-                Ok(path) => lab.set_status(format!("Exporté: {:?}", path)),
-                Err(e) => lab.set_status(format!("Échec export: {}", e)),
+            if ui.button("📊 Export Metrics CSV").clicked() {
+                match lab.export_metrics_csv() {
+                    Ok(path) => lab.set_status(format!("Exporté: {:?}", path)),
+                    Err(e) => lab.set_status(format!("Échec export: {}", e)),
+                }
             }
-        }
 
-        if ui.button("📝 Export Rapport").clicked() {
-            match lab.export_report(params) {
-                Ok(path) => lab.set_status(format!("Rapport: {:?}", path)),
-                Err(e) => lab.set_status(format!("Échec rapport: {}", e)),
+            if ui.button("📝 Export Rapport").clicked() {
+                match lab.export_report(params) {
+                    Ok(path) => lab.set_status(format!("Rapport: {:?}", path)),
+                    Err(e) => lab.set_status(format!("Échec rapport: {}", e)),
+                }
             }
-        }
-    });
+        });
 }
 
 // ======================== View Toggles ========================
@@ -804,7 +897,12 @@ fn render_right_analysis_panel(ctx: &egui::Context, lab: &mut LabState) {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("📈").size(24.0));
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new("Live Analysis").size(20.0).strong().color(egui::Color32::from_rgb(150, 220, 150)));
+                ui.label(
+                    egui::RichText::new("Live Analysis")
+                        .size(20.0)
+                        .strong()
+                        .color(egui::Color32::from_rgb(150, 220, 150)),
+                );
             });
             ui.add_space(8.0);
             ui.separator();
@@ -826,14 +924,30 @@ fn render_right_analysis_panel(ctx: &egui::Context, lab: &mut LabState) {
                         stat_row(ui, "Avg Energy", &format!("{:.4}", last.avg_energy));
                         stat_row(ui, "Entropy", &format!("{:.2} bits", last.entropy));
                         stat_row(ui, "Species", &format!("{}", last.species));
-                        stat_row(ui, "Live Pixels", &format!("{} ({:.1}%)", last.live_pixels, last.live_fraction * 100.0));
-                        stat_row(ui, "Predators", &format!("{:.1}%", last.predator_fraction * 100.0));
+                        stat_row(
+                            ui,
+                            "Live Pixels",
+                            &format!("{} ({:.1}%)", last.live_pixels, last.live_fraction * 100.0),
+                        );
+                        stat_row(
+                            ui,
+                            "Predators",
+                            &format!("{:.1}%", last.predator_fraction * 100.0),
+                        );
                         stat_row(ui, "Avg Resource", &format!("{:.3}", last.avg_resource));
                         stat_row(ui, "Mass StdDev", &format!("{:.4}", last.mass_std_dev));
                         // Phase 1 eco metrics
                         stat_row(ui, "Prey %", &format!("{:.1}%", last.prey_fraction * 100.0));
-                        stat_row(ui, "Opportunist %", &format!("{:.1}%", last.opportunist_fraction * 100.0));
-                        stat_row(ui, "Eff. Diversity", &format!("{:.2}", last.effective_diversity));
+                        stat_row(
+                            ui,
+                            "Opportunist %",
+                            &format!("{:.1}%", last.opportunist_fraction * 100.0),
+                        );
+                        stat_row(
+                            ui,
+                            "Eff. Diversity",
+                            &format!("{:.2}", last.effective_diversity),
+                        );
                         stat_row(ui, "Genome Var", &format!("{:.4}", last.genome_variance));
                         stat_row(ui, "Total Energy", &format!("{:.0}", last.total_energy));
                         stat_row(ui, "Energy Flux", &format!("{:.4}", last.energy_flux));
@@ -843,17 +957,33 @@ fn render_right_analysis_panel(ctx: &egui::Context, lab: &mut LabState) {
 
             // Time-series plots
             egui::ScrollArea::vertical().show(ui, |ui| {
-                render_plot(ui, "Total Mass", &lab.metrics_history, |m| m.total_mass as f64);
-                render_plot(ui, "Avg Energy", &lab.metrics_history, |m| m.avg_energy as f64);
-                render_plot(ui, "Genetic Entropy", &lab.metrics_history, |m| m.entropy as f64);
-                render_plot(ui, "Species Count", &lab.metrics_history, |m| m.species as f64);
-                render_plot(ui, "Live Pixels", &lab.metrics_history, |m| m.live_pixels as f64);
+                render_plot(ui, "Total Mass", &lab.metrics_history, |m| {
+                    m.total_mass as f64
+                });
+                render_plot(ui, "Avg Energy", &lab.metrics_history, |m| {
+                    m.avg_energy as f64
+                });
+                render_plot(ui, "Genetic Entropy", &lab.metrics_history, |m| {
+                    m.entropy as f64
+                });
+                render_plot(ui, "Species Count", &lab.metrics_history, |m| {
+                    m.species as f64
+                });
+                render_plot(ui, "Live Pixels", &lab.metrics_history, |m| {
+                    m.live_pixels as f64
+                });
                 render_plot(ui, "FPS", &lab.metrics_history, |m| m.fps as f64);
 
                 // Phase 1 eco plots
-                render_plot(ui, "Effective Diversity", &lab.metrics_history, |m| m.effective_diversity as f64);
-                render_plot(ui, "Energy Flux", &lab.metrics_history, |m| m.energy_flux as f64);
-                render_plot(ui, "Genome Variance", &lab.metrics_history, |m| m.genome_variance as f64);
+                render_plot(ui, "Effective Diversity", &lab.metrics_history, |m| {
+                    m.effective_diversity as f64
+                });
+                render_plot(ui, "Energy Flux", &lab.metrics_history, |m| {
+                    m.energy_flux as f64
+                });
+                render_plot(ui, "Genome Variance", &lab.metrics_history, |m| {
+                    m.genome_variance as f64
+                });
 
                 // Comparison section
                 if !lab.completed_runs.is_empty() {
@@ -867,7 +997,12 @@ fn render_right_analysis_panel(ctx: &egui::Context, lab: &mut LabState) {
 
 fn stat_row(ui: &mut egui::Ui, label: &str, value: &str) {
     ui.label(egui::RichText::new(label).color(egui::Color32::from_rgb(180, 180, 200)));
-    ui.label(egui::RichText::new(value).monospace().strong().color(egui::Color32::from_rgb(220, 220, 240)));
+    ui.label(
+        egui::RichText::new(value)
+            .monospace()
+            .strong()
+            .color(egui::Color32::from_rgb(220, 220, 240)),
+    );
     ui.end_row();
 }
 
@@ -932,10 +1067,9 @@ fn render_comparison_ui(ui: &mut egui::Ui, lab: &mut LabState) {
 
     if let (Some(a_idx), Some(b_idx)) = (lab.comparison_a, lab.comparison_b) {
         if a_idx != b_idx {
-            if let (Some(run_a), Some(run_b)) = (
-                lab.completed_runs.get(a_idx),
-                lab.completed_runs.get(b_idx),
-            ) {
+            if let (Some(run_a), Some(run_b)) =
+                (lab.completed_runs.get(a_idx), lab.completed_runs.get(b_idx))
+            {
                 let csv_a = run_a.run_dir.join("metrics.csv");
                 let csv_b = run_b.run_dir.join("metrics.csv");
 
@@ -944,9 +1078,15 @@ fn render_comparison_ui(ui: &mut egui::Ui, lab: &mut LabState) {
                     LabState::load_comparison_metrics(&csv_b),
                 ) {
                     (Ok(metrics_a), Ok(metrics_b)) => {
-                        render_comparison_plot(ui, "Mass", &metrics_a, &metrics_b, |m| m.total_mass as f64);
-                        render_comparison_plot(ui, "Entropy", &metrics_a, &metrics_b, |m| m.entropy as f64);
-                        render_comparison_plot(ui, "Species", &metrics_a, &metrics_b, |m| m.species as f64);
+                        render_comparison_plot(ui, "Mass", &metrics_a, &metrics_b, |m| {
+                            m.total_mass as f64
+                        });
+                        render_comparison_plot(ui, "Entropy", &metrics_a, &metrics_b, |m| {
+                            m.entropy as f64
+                        });
+                        render_comparison_plot(ui, "Species", &metrics_a, &metrics_b, |m| {
+                            m.species as f64
+                        });
                     }
                     _ => {
                         ui.label("Could not load comparison data.");
@@ -975,10 +1115,22 @@ fn render_comparison_plot<F>(
         .allow_drag(false)
         .allow_scroll(false)
         .show(ui, |plot_ui| {
-            plot_ui.line(Line::new(points_a).name("Run A").color(egui::Color32::from_rgb(100, 200, 255)));
-            plot_ui.line(Line::new(points_b).name("Run B").color(egui::Color32::from_rgb(255, 150, 100)));
+            plot_ui.line(
+                Line::new(points_a)
+                    .name("Run A")
+                    .color(egui::Color32::from_rgb(100, 200, 255)),
+            );
+            plot_ui.line(
+                Line::new(points_b)
+                    .name("Run B")
+                    .color(egui::Color32::from_rgb(255, 150, 100)),
+            );
         });
-    ui.label(egui::RichText::new(format!("{} (A vs B)", title)).small().strong());
+    ui.label(
+        egui::RichText::new(format!("{} (A vs B)", title))
+            .small()
+            .strong(),
+    );
     ui.add_space(4.0);
 }
 
@@ -1016,7 +1168,12 @@ fn render_bottom_logs_panel(ctx: &egui::Context, lab: &mut LabState) {
                             "SCREENSHOT" | "SNAPSHOT" => egui::Color32::from_rgb(200, 150, 255),
                             _ => egui::Color32::from_rgb(180, 180, 180),
                         };
-                        ui.label(egui::RichText::new(event.to_log_line()).small().color(color).monospace());
+                        ui.label(
+                            egui::RichText::new(event.to_log_line())
+                                .small()
+                                .color(color)
+                                .monospace(),
+                        );
                     }
                 });
         });
@@ -1969,7 +2126,14 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
 
 /// Get unique categories from the catalog
 pub fn preset_categories() -> Vec<&'static str> {
-    vec!["Autonomous", "Predation", "Explosive", "Stable", "Special", "Experimental"]
+    vec![
+        "Autonomous",
+        "Predation",
+        "Explosive",
+        "Stable",
+        "Special",
+        "Experimental",
+    ]
 }
 
 // ======================== Preset Save/Load ========================
@@ -1993,7 +2157,7 @@ fn save_preset(name: &str, params: &SimulationParams) {
     }
 }
 
-fn load_preset(name: &str) -> Option<SimulationParams> {
+pub(crate) fn load_preset(name: &str) -> Option<SimulationParams> {
     let path = std::path::PathBuf::from(format!("presets/{}.json", name));
     let content = std::fs::read_to_string(&path).ok()?;
     match serde_json::from_str::<SimulationParams>(&content) {

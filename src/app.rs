@@ -20,7 +20,7 @@ use crate::lab::LabState;
 use crate::lab_ui;
 use crate::metrics::SimDiagnostics;
 use crate::pipeline::{create_pipelines, Pipelines};
-use crate::renderer::HudRenderer;
+use crate::renderer::{HudPrepareConfig, HudRenderer};
 use crate::state_io;
 use crate::world::*;
 
@@ -87,7 +87,10 @@ struct AppState {
 
 impl App {
     pub fn new(config: AppConfig) -> Self {
-        Self { state: None, config }
+        Self {
+            state: None,
+            config,
+        }
     }
 }
 
@@ -124,7 +127,10 @@ impl ApplicationHandler for App {
                     if world.apply_snapshot(&queue, &snapshot) {
                         log::info!("Loaded simulation state from {}", path);
                     } else {
-                        log::warn!("State file {} has incompatible dimensions; using fresh world", path);
+                        log::warn!(
+                            "State file {} has incompatible dimensions; using fresh world",
+                            path
+                        );
                     }
                 }
                 Err(err) => {
@@ -137,7 +143,7 @@ impl ApplicationHandler for App {
 
         // ---- Initialize egui ----
         let egui_ctx = egui::Context::default();
-        
+
         // Enhanced dark theme - OPAQUE backgrounds with vibrant accents
         let mut visuals = egui::Visuals::dark();
         // Fully opaque panel backgrounds
@@ -148,18 +154,21 @@ impl ApplicationHandler for App {
         // Vibrant accent colors
         visuals.window_stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(70, 130, 180));
         visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(32, 36, 48);
-        visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(160, 170, 190));
+        visuals.widgets.noninteractive.fg_stroke =
+            egui::Stroke::new(1.0, egui::Color32::from_rgb(160, 170, 190));
         visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(45, 50, 65);
-        visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(180, 190, 210));
+        visuals.widgets.inactive.fg_stroke =
+            egui::Stroke::new(1.0, egui::Color32::from_rgb(180, 190, 210));
         visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(60, 90, 130);
-        visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(220, 230, 255));
+        visuals.widgets.hovered.fg_stroke =
+            egui::Stroke::new(1.5, egui::Color32::from_rgb(220, 230, 255));
         visuals.widgets.active.bg_fill = egui::Color32::from_rgb(80, 140, 200);
         visuals.widgets.active.fg_stroke = egui::Stroke::new(2.0, egui::Color32::WHITE);
         visuals.selection.bg_fill = egui::Color32::from_rgb(50, 120, 180);
         visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(100, 180, 255));
         visuals.hyperlink_color = egui::Color32::from_rgb(100, 200, 255);
         egui_ctx.set_visuals(visuals);
-        
+
         // Larger default font size for better readability
         let mut style = (*egui_ctx.style()).clone();
         style.text_styles.insert(
@@ -191,13 +200,8 @@ impl ApplicationHandler for App {
             None,
         );
 
-        let egui_renderer = egui_wgpu::Renderer::new(
-            &device,
-            surface_config.format,
-            None,
-            1,
-            false,
-        );
+        let egui_renderer =
+            egui_wgpu::Renderer::new(&device, surface_config.format, None, 1, false);
 
         log::info!(
             "EvoLenia v2 Research Lab initialized: {}x{}, target mass = {:.0}",
@@ -249,7 +253,9 @@ impl ApplicationHandler for App {
         };
 
         // Pass events to egui first
-        let egui_response = state.egui_winit_state.on_window_event(&state.window, &event);
+        let egui_response = state
+            .egui_winit_state
+            .on_window_event(&state.window, &event);
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -274,7 +280,9 @@ impl ApplicationHandler for App {
                 if new_size.width > 0 && new_size.height > 0 {
                     state.surface_config.width = new_size.width;
                     state.surface_config.height = new_size.height;
-                    state.surface.configure(&state.device, &state.surface_config);
+                    state
+                        .surface
+                        .configure(&state.device, &state.surface_config);
                 }
             }
 
@@ -335,10 +343,16 @@ async fn init_gpu(
         .unwrap_or(surface_caps.formats[0]);
 
     // Use Mailbox (uncapped FPS, no tearing) if available, else Immediate, else Fifo.
-    let present_mode = if surface_caps.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+    let present_mode = if surface_caps
+        .present_modes
+        .contains(&wgpu::PresentMode::Mailbox)
+    {
         log::info!("Present mode: Mailbox (uncapped FPS)");
         wgpu::PresentMode::Mailbox
-    } else if surface_caps.present_modes.contains(&wgpu::PresentMode::Immediate) {
+    } else if surface_caps
+        .present_modes
+        .contains(&wgpu::PresentMode::Immediate)
+    {
         log::info!("Present mode: Immediate (uncapped FPS)");
         wgpu::PresentMode::Immediate
     } else {
@@ -375,14 +389,21 @@ fn handle_keyboard(
         Key::Named(NamedKey::Escape) if pressed => event_loop.exit(),
         Key::Named(NamedKey::F1) if pressed => {
             state.lab.show_lab_ui = !state.lab.show_lab_ui;
-            log::info!("Lab UI: {}", if state.lab.show_lab_ui { "ON" } else { "OFF" });
+            log::info!(
+                "Lab UI: {}",
+                if state.lab.show_lab_ui { "ON" } else { "OFF" }
+            );
         }
         Key::Named(NamedKey::F9) if pressed => {
             state.lab.show_analysis_panel = !state.lab.show_analysis_panel;
         }
         Key::Named(NamedKey::F12) if pressed => {
             state.lab.screenshot_requested = true;
-            state.lab.log_event(state.world.frame, "SCREENSHOT", "Screenshot requested (F12)");
+            state.lab.log_event(
+                state.world.frame,
+                "SCREENSHOT",
+                "Screenshot requested (F12)",
+            );
         }
         _ => {}
     }
@@ -398,7 +419,11 @@ fn handle_keyboard(
             state.lab.log_event(
                 state.world.frame,
                 "CONTROL",
-                if state.sim_params.paused { "Paused" } else { "Resumed" },
+                if state.sim_params.paused {
+                    "Paused"
+                } else {
+                    "Resumed"
+                },
             );
         }
 
@@ -428,15 +453,15 @@ fn handle_keyboard(
                     wgpu::PresentMode::Immediate
                 };
                 state.surface_config.present_mode = mode;
-                state.surface.configure(&state.device, &state.surface_config);
+                state
+                    .surface
+                    .configure(&state.device, &state.surface_config);
             }
             "[" if pressed => {
-                state.sim_params.mutation_rate =
-                    (state.sim_params.mutation_rate * 0.9).max(0.1);
+                state.sim_params.mutation_rate = (state.sim_params.mutation_rate * 0.9).max(0.1);
             }
             "]" if pressed => {
-                state.sim_params.mutation_rate =
-                    (state.sim_params.mutation_rate * 1.1).min(5.0);
+                state.sim_params.mutation_rate = (state.sim_params.mutation_rate * 1.1).min(5.0);
             }
             _ => {}
         },
@@ -447,16 +472,13 @@ fn handle_keyboard(
                     (state.sim_params.visualization_mode + 1) % VIS_MODE_COUNT;
             }
             NamedKey::ArrowUp if pressed => {
-                state.sim_params.time_step =
-                    (state.sim_params.time_step * 1.1).min(TIME_STEP_MAX);
+                state.sim_params.time_step = (state.sim_params.time_step * 1.1).min(TIME_STEP_MAX);
             }
             NamedKey::ArrowDown if pressed => {
-                state.sim_params.time_step =
-                    (state.sim_params.time_step * 0.9).max(TIME_STEP_MIN);
+                state.sim_params.time_step = (state.sim_params.time_step * 0.9).max(TIME_STEP_MIN);
             }
             NamedKey::ArrowRight if pressed => {
-                state.sim_params.simulation_speed =
-                    (state.sim_params.simulation_speed + 1).min(20);
+                state.sim_params.simulation_speed = (state.sim_params.simulation_speed + 1).min(20);
             }
             NamedKey::ArrowLeft if pressed => {
                 state.sim_params.simulation_speed =
@@ -478,7 +500,10 @@ fn redraw(state: &mut AppState) {
 
     // FPS (exponential moving average)
     let now = Instant::now();
-    let dt = now.duration_since(state.last_redraw).as_secs_f32().max(0.0001);
+    let dt = now
+        .duration_since(state.last_redraw)
+        .as_secs_f32()
+        .max(0.0001);
     state.last_redraw = now;
     state.fps = state.fps * 0.95 + (1.0 / dt) * 0.05;
 
@@ -486,9 +511,7 @@ fn redraw(state: &mut AppState) {
     state
         .camera
         .apply_pan(state.keys.w, state.keys.s, state.keys.a, state.keys.d);
-    state
-        .camera
-        .apply_zoom_keys(state.keys.e, state.keys.q);
+    state.camera.apply_zoom_keys(state.keys.e, state.keys.q);
 
     // Upload camera uniform with window dimensions for aspect ratio correction
     state.queue.write_buffer(
@@ -528,20 +551,22 @@ fn redraw(state: &mut AppState) {
             create_pipelines(&state.device, &state.world, state.surface_config.format);
         state.lab.restart_requested = false;
         state.last_diag = None;
-        state.lab.log_event(state.world.frame, "RESTART", "Simulation restarted");
+        state
+            .lab
+            .log_event(state.world.frame, "RESTART", "Simulation restarted");
         if let Some(s) = seed {
-            state.lab.log_event(state.world.frame, "SEED", &format!("Seed: {}", s));
+            state
+                .lab
+                .log_event(state.world.frame, "SEED", &format!("Seed: {}", s));
         }
         log::info!("Simulation restarted (seed: {:?})", seed);
     }
 
     // ---- Handle perturbation ----
     if state.sim_params.perturbation_active {
-        state.world.apply_perturbation(
-            &state.device,
-            &state.queue,
-            &state.sim_params,
-        );
+        state
+            .world
+            .apply_perturbation(&state.device, &state.queue, &state.sim_params);
         state.sim_params.perturbation_active = false;
         log::info!(
             "Perturbation applied: {} intensity={:.2} radius={:.2}",
@@ -560,21 +585,21 @@ fn redraw(state: &mut AppState) {
 
     // ---- Prepare HUD (only when Lab UI hidden, to avoid overlap) ----
     if !state.lab.show_lab_ui {
-        state.hud.prepare(
-            &state.device,
-            &state.queue,
-            &state.sim_params,
-            state.world.frame,
-            state.fps,
-            state.camera.zoom,
+        state.hud.prepare(&HudPrepareConfig {
+            device: &state.device,
+            queue: &state.queue,
+            params: &state.sim_params,
+            frame: state.world.frame,
+            fps: state.fps,
+            camera_zoom: state.camera.zoom,
             win_w,
             win_h,
-        );
+        });
     }
 
-    let dispatch_x = (WORLD_WIDTH + WORKGROUP_X - 1) / WORKGROUP_X;
-    let dispatch_y = (WORLD_HEIGHT + WORKGROUP_Y - 1) / WORKGROUP_Y;
-    let dispatch_linear = (total_pixels() + 255) / 256;
+    let dispatch_x = WORLD_WIDTH.div_ceil(WORKGROUP_X);
+    let dispatch_y = WORLD_HEIGHT.div_ceil(WORKGROUP_Y);
+    let dispatch_linear = total_pixels().div_ceil(256);
 
     // ---- Simulation steps ----
     if !state.sim_params.paused {
@@ -585,11 +610,12 @@ fn redraw(state: &mut AppState) {
                 .update_step_uniforms_dynamic(&state.queue, &state.sim_params);
 
             let cur = state.world.cur();
-            let mut sim_encoder = state
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("sim_encoder"),
-                });
+            let mut sim_encoder =
+                state
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("sim_encoder"),
+                    });
             encode_simulation_passes(
                 &mut sim_encoder,
                 &state.pipelines,
@@ -607,11 +633,12 @@ fn redraw(state: &mut AppState) {
             .world
             .update_step_uniforms_dynamic(&state.queue, &state.sim_params);
         let cur = state.world.cur();
-        let mut sim_encoder = state
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("step_encoder"),
-            });
+        let mut sim_encoder =
+            state
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("step_encoder"),
+                });
         encode_simulation_passes(
             &mut sim_encoder,
             &state.pipelines,
@@ -623,7 +650,9 @@ fn redraw(state: &mut AppState) {
         state.queue.submit(std::iter::once(sim_encoder.finish()));
         state.world.swap();
         state.lab.step_requested = false;
-        state.lab.log_event(state.world.frame, "CONTROL", "Single step");
+        state
+            .lab
+            .log_event(state.world.frame, "CONTROL", "Single step");
     }
 
     // ---- Render pass ----
@@ -637,7 +666,9 @@ fn redraw(state: &mut AppState) {
     let output = match state.surface.get_current_texture() {
         Ok(t) => t,
         Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-            state.surface.configure(&state.device, &state.surface_config);
+            state
+                .surface
+                .configure(&state.device, &state.surface_config);
             return;
         }
         Err(e) => {
@@ -689,7 +720,7 @@ fn redraw(state: &mut AppState) {
     if do_screenshot {
         let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
         let unpadded_bpr = win_w * 4;
-        let padded_bpr = (unpadded_bpr + align - 1) / align * align;
+        let padded_bpr = unpadded_bpr.div_ceil(align) * align;
         screenshot_padded_bpr = padded_bpr;
 
         let staging = state.device.create_buffer(&wgpu::BufferDescriptor {
@@ -803,7 +834,9 @@ fn redraw(state: &mut AppState) {
                     state.sim_params.visualization_mode,
                 ) {
                     Ok(path) => {
-                        state.lab.set_status(format!("Screenshot saved: {:?}", path));
+                        state
+                            .lab
+                            .set_status(format!("Screenshot saved: {:?}", path));
                         state.lab.log_event(
                             state.world.frame,
                             "SCREENSHOT",
@@ -829,9 +862,7 @@ fn redraw(state: &mut AppState) {
                 .join(format!("snapshot_frame{:06}.snap", state.world.frame));
             match state_io::save_snapshot(path.to_str().unwrap_or("snapshot.snap"), &snap) {
                 Ok(()) => {
-                    state
-                        .lab
-                        .set_status(format!("Snapshot saved: {:?}", path));
+                    state.lab.set_status(format!("Snapshot saved: {:?}", path));
                     state.lab.log_event(
                         state.world.frame,
                         "SNAPSHOT",
@@ -857,7 +888,7 @@ fn redraw(state: &mut AppState) {
     // ---- Periodic diagnostics ----
     if !state.sim_params.paused
         && state.world.frame > 0
-        && state.world.frame % state.diag_interval == 0
+        && state.world.frame.is_multiple_of(state.diag_interval)
     {
         if let Some(snap) = state.world.readback_snapshot(&state.device, &state.queue) {
             let diag = SimDiagnostics::from_snapshot(&snap);

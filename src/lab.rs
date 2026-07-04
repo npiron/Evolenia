@@ -141,11 +141,7 @@ impl Default for LabState {
     fn default() -> Self {
         let now = Local::now();
         let run_id = format!("run_{}", now.format("%Y%m%d_%H%M%S"));
-        let run_dir = PathBuf::from(format!(
-            "runs/{}/{}",
-            now.format("%Y-%m-%d"),
-            &run_id
-        ));
+        let run_dir = PathBuf::from(format!("runs/{}/{}", now.format("%Y-%m-%d"), &run_id));
 
         Self {
             run_id,
@@ -185,11 +181,7 @@ impl LabState {
     pub fn start_run(&mut self, params: &SimulationParams) {
         let now = Local::now();
         self.run_id = format!("run_{}", now.format("%Y%m%d_%H%M%S"));
-        self.run_dir = PathBuf::from(format!(
-            "runs/{}/{}",
-            now.format("%Y-%m-%d"),
-            &self.run_id
-        ));
+        self.run_dir = PathBuf::from(format!("runs/{}/{}", now.format("%Y-%m-%d"), &self.run_id));
         self.run_start = Instant::now();
         self.run_start_time = now.format("%Y-%m-%d %H:%M:%S").to_string();
         self.run_active = true;
@@ -281,8 +273,8 @@ impl LabState {
     /// Export metrics to CSV.
     pub fn export_metrics_csv(&self) -> Result<PathBuf, String> {
         let path = self.run_dir.join("metrics.csv");
-        let mut file = fs::File::create(&path)
-            .map_err(|e| format!("Failed to create metrics.csv: {}", e))?;
+        let mut file =
+            fs::File::create(&path).map_err(|e| format!("Failed to create metrics.csv: {}", e))?;
 
         writeln!(file, "{}", MetricsRecord::csv_header())
             .map_err(|e| format!("Write error: {}", e))?;
@@ -292,19 +284,22 @@ impl LabState {
                 .map_err(|e| format!("Write error: {}", e))?;
         }
 
-        log::info!("Exported {} metrics records to {:?}", self.metrics_history.len(), path);
+        log::info!(
+            "Exported {} metrics records to {:?}",
+            self.metrics_history.len(),
+            path
+        );
         Ok(path)
     }
 
     /// Export events log.
     pub fn export_events_log(&self) -> Result<PathBuf, String> {
         let path = self.run_dir.join("events.log");
-        let mut file = fs::File::create(&path)
-            .map_err(|e| format!("Failed to create events.log: {}", e))?;
+        let mut file =
+            fs::File::create(&path).map_err(|e| format!("Failed to create events.log: {}", e))?;
 
         for event in &self.events {
-            writeln!(file, "{}", event.to_log_line())
-                .map_err(|e| format!("Write error: {}", e))?;
+            writeln!(file, "{}", event.to_log_line()).map_err(|e| format!("Write error: {}", e))?;
         }
 
         log::info!("Exported {} events to {:?}", self.events.len(), path);
@@ -314,8 +309,8 @@ impl LabState {
     /// Export a full run report (markdown).
     pub fn export_report(&self, params: &SimulationParams) -> Result<PathBuf, String> {
         let path = self.run_dir.join("report.md");
-        let mut file = fs::File::create(&path)
-            .map_err(|e| format!("Failed to create report.md: {}", e))?;
+        let mut file =
+            fs::File::create(&path).map_err(|e| format!("Failed to create report.md: {}", e))?;
 
         let last_metrics = self.metrics_history.last();
 
@@ -353,17 +348,26 @@ impl LabState {
                      | Live Pixels | {} ({:.1}%) |\n\
                      | Predator % | {:.1}% |\n\
                      | FPS | {:.0} |",
-                    m.total_mass, m.avg_energy, m.entropy, m.species,
-                    m.live_pixels, m.live_fraction * 100.0,
-                    m.predator_fraction * 100.0, m.fps,
+                    m.total_mass,
+                    m.avg_energy,
+                    m.entropy,
+                    m.species,
+                    m.live_pixels,
+                    m.live_fraction * 100.0,
+                    m.predator_fraction * 100.0,
+                    m.fps,
                 )
             } else {
                 "No metrics collected.".to_string()
             },
             self.events.len(),
-            self.events.iter().rev().take(10)
+            self.events
+                .iter()
+                .rev()
+                .take(10)
                 .map(|e| format!("- {}", e.to_log_line()))
-                .collect::<Vec<_>>().join("\n"),
+                .collect::<Vec<_>>()
+                .join("\n"),
         );
 
         write!(file, "{}", report).map_err(|e| format!("Write error: {}", e))?;
@@ -399,7 +403,11 @@ impl LabState {
             metrics_count: self.metrics_history.len(),
         });
 
-        self.log_event(total_frames, "RUN_END", &format!("Run {} finalized", self.run_id));
+        self.log_event(
+            total_frames,
+            "RUN_END",
+            &format!("Run {} finalized", self.run_id),
+        );
         self.set_status(format!("Run {} finalized — data exported", self.run_id));
         self.run_active = false;
     }
@@ -425,14 +433,8 @@ impl LabState {
         );
         let path = screenshots_dir.join(&filename);
 
-        image::save_buffer(
-            &path,
-            rgba_data,
-            width,
-            height,
-            image::ColorType::Rgba8,
-        )
-        .map_err(|e| format!("Failed to save screenshot: {}", e))?;
+        image::save_buffer(&path, rgba_data, width, height, image::ColorType::Rgba8)
+            .map_err(|e| format!("Failed to save screenshot: {}", e))?;
 
         log::info!("Screenshot saved: {:?}", path);
         Ok(path)
@@ -457,13 +459,17 @@ impl LabState {
 
     /// Load metrics from a previous run CSV for comparison.
     pub fn load_comparison_metrics(path: &PathBuf) -> Result<Vec<MetricsRecord>, String> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read {:?}: {}", path, e))?;
+        let content =
+            fs::read_to_string(path).map_err(|e| format!("Failed to read {:?}: {}", path, e))?;
         let mut records = Vec::new();
         for (i, line) in content.lines().enumerate() {
-            if i == 0 { continue; } // skip header
+            if i == 0 {
+                continue;
+            } // skip header
             let fields: Vec<&str> = line.split(',').collect();
-            if fields.len() < 17 { continue; }
+            if fields.len() < 17 {
+                continue;
+            }
             let record = MetricsRecord {
                 frame: fields[0].parse().unwrap_or(0),
                 time_ms: fields[1].parse().unwrap_or(0.0),

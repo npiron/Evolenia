@@ -55,6 +55,12 @@ fn rand_signed(seed: u32) -> f32 {
     return rand01(seed) * 2.0 - 1.0;
 }
 
+// NaN/Inf check — WGSL has no builtin isfinite/is_nan/is_inf.
+// NaN is the only float where x != x. Inf satisfies x * 2 == x && x != 0.
+fn is_bad(v: f32) -> bool {
+    return !(v == v) || (v != 0.0 && v * 2.0 == v);
+}
+
 // Toroidal indexing
 fn idx(x: i32, y: i32) -> u32 {
     let wx = ((x % i32(params.width)) + i32(params.width)) % i32(params.width);
@@ -264,14 +270,19 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Costs reduced vs v1 so Lenia-scale creatures (R=10-15) can survive.
     // Non-linear radius cost: pow(r/15, exponent) — normalized to max radius 15
     let genomic_complexity = length(vec3<f32>(mu, sigma, agg));
-    let radius_penalty = pow(r / 15.0, params.radius_cost_exp) * 0.02;
-    let agg_penalty = agg * agg * 0.03 * params.predation_factor;
-    let predator_interference = agg * agg * agg * 0.015 * params.predation_factor;
-    var cost = (genomic_complexity * 0.012 + radius_penalty + agg_penalty + predator_interference) * m;
+    // Metabolic trade-offs — tuned for balanced ecosystem dynamics.
+    // - radius_cost_exp > 1 penalizes large perception radii (quadratic scaling).
+    // - agg_penalty + predator_interference make high-aggressivity costly.
+    // - absorption favors passive organisms (prey_bonus), rewarding herbivory.
+    // - predators must offset their costs by actually capturing prey (handled in
+    //   the advection / genome-segregation phase via predation_factor).
+    let radius_penalty = pow(r / 15.0, params.radius_cost_exp) * 0.015;
+    let agg_penalty = agg * agg * 0.025 * params.predation_factor;
+    let predator_interference = agg * agg * agg * 0.012 * params.predation_factor;
+    var cost = (genomic_complexity * 0.010 + radius_penalty + agg_penalty + predator_interference) * m;
     // Absorption from local resource map (nutrient uptake)
-    // Increased absorption to support larger organisms with bigger radii
-    let prey_bonus = (1.0 - agg) * 0.010;
-    var absorption = resource_map[i] * m * (0.040 + prey_bonus);
+    let prey_bonus = (1.0 - agg) * 0.012;
+    var absorption = resource_map[i] * m * (0.045 + prey_bonus);
 
     // Entropy-energy coupling:
     // - Diverse neighborhoods get better energy uptake.
@@ -285,7 +296,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     var energy_new = clamp(e + absorption - cost, 0.0, 1.0);
 
-    // Starvation: significant mass decay when energy depleted
+    // Starvation: mass decay when energy is critically depleted.
+    // starvation_k ramps from 0 (at e=0.05) to 1 (at e=0), then the
+    // starvation_severity parameter controls how much mass is lost.
+    // At default severity (0.03), a fully starved cell loses 3% mass per step.
     if (energy_new <= 0.05) {
         let starvation_k = 1.0 - energy_new / 0.05; // 0 at e=0.05, 1 at e=0
         mass_candidate *= 1.0 - params.starvation_severity * starvation_k;
@@ -347,12 +361,20 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // ================== DNA ADVECTION — STOCHASTIC SEGREGATION ==================
     // When mass flows from neighbor to self, the neighbor's genome can
-    // "colonize" this cell. Probability proportional to flux/mass ratio.
+    // "colonize" this cell. Probability proportional to flux vs the cell's
+    // PRE-advection mass (mass_candidate), not post-advection (mass_new).
+    //
+    // Fix: using mass_new (post-advection) underestimates colonization probability
+    // because mass_new = mass_candidate + flux_in - flux_out, inflating the denominator.
+    // The correct reference is mass_candidate (the cell's own biomass before
+    // receiving immigrants), which gives the true immigrant-to-native ratio.
+    //
     // Biology: this implements spatial heredity via mass transport.
     var genome_a_new = ga;
     var genome_b_new = gb;
 
     var seed = base_seed;
+    let immigration_base = mass_candidate + 0.001; // pre-advection mass for colonization probability
     // Genome advection — unrolled
     // right
     { let ni = idx(x + 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
@@ -360,7 +382,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
             let vn_eff = vn * neigh_mobility;
             let fi = clamp(dot(vn_eff, vec2<f32>(-1.0, 0.0)), 0.0, mn / 4.0);
-      if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 1u);
+      if (fi > 0.001) { let p = fi / immigration_base; seed = pcg_hash(seed + 1u);
         if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
     // left
     { let ni = idx(x - 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
@@ -368,7 +390,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
             let vn_eff = vn * neigh_mobility;
             let fi = clamp(dot(vn_eff, vec2<f32>(1.0, 0.0)), 0.0, mn / 4.0);
-      if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 2u);
+      if (fi > 0.001) { let p = fi / immigration_base; seed = pcg_hash(seed + 2u);
         if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
     // down
     { let ni = idx(x, y + 1); let vn = velocity[ni]; let mn = mass_in[ni];
@@ -376,7 +398,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
             let vn_eff = vn * neigh_mobility;
             let fi = clamp(dot(vn_eff, vec2<f32>(0.0, -1.0)), 0.0, mn / 4.0);
-      if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 3u);
+      if (fi > 0.001) { let p = fi / immigration_base; seed = pcg_hash(seed + 3u);
         if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
     // up
     { let ni = idx(x, y - 1); let vn = velocity[ni]; let mn = mass_in[ni];
@@ -384,7 +406,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
             let vn_eff = vn * neigh_mobility;
             let fi = clamp(dot(vn_eff, vec2<f32>(0.0, 1.0)), 0.0, mn / 4.0);
-      if (fi > 0.001) { let p = fi / (mass_new + 0.001); seed = pcg_hash(seed + 4u);
+      if (fi > 0.001) { let p = fi / immigration_base; seed = pcg_hash(seed + 4u);
         if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
 
     // ================== MUTATIONS ==================
@@ -454,7 +476,20 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
 
-    // ================== WRITE OUTPUTS ==================
+    // ================== WRITE OUTPUTS (with NaN/Inf guards) ==================
+    // Guard against NaN/Inf propagation: if any output is non-finite,
+    // reset the pixel to an inert state to prevent cascading corruption.
+    if (is_bad(mass_new) || is_bad(energy_new) ||
+        is_bad(genome_a_new.x) || is_bad(genome_a_new.y) ||
+        is_bad(genome_a_new.z) || is_bad(genome_a_new.w) ||
+        is_bad(genome_b_new)) {
+        mass_out[i] = 0.0;
+        energy_out[i] = 0.5;
+        genome_a_out[i] = vec4<f32>(10.0, 0.15, 0.02, 0.0);
+        genome_b_out[i] = 0.003;
+        return;
+    }
+
     mass_out[i] = mass_new;
     energy_out[i] = energy_new;
     genome_a_out[i] = genome_a_new;

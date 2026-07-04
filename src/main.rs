@@ -20,13 +20,33 @@ mod world;
 mod tests;
 
 use app::{App, AppConfig};
+use config::load_toml_config;
 use headless::{run_headless, HeadlessConfig};
 use winit::event_loop::EventLoop;
 
 fn main() {
-    env_logger::init();
+    // Initialize structured logging with timestamps and module-level targets.
+    // Controlled via RUST_LOG env var: RUST_LOG=info,evolenia::headless=debug
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format_timestamp_millis()
+        .init();
 
     let cli = CliOptions::from_args(std::env::args().collect());
+
+    // Load optional TOML config file
+    let _config_params = cli
+        .config_path
+        .as_ref()
+        .and_then(|path| match load_toml_config(path) {
+            Ok(p) => {
+                log::info!("Loaded config from {}", path);
+                Some(p)
+            }
+            Err(e) => {
+                log::warn!("Failed to load config from {}: {}", path, e);
+                None
+            }
+        });
 
     if cli.headless || cli.headless_then_gui {
         let headless_cfg = HeadlessConfig {
@@ -34,6 +54,7 @@ fn main() {
             load_state_path: cli.load_state_path.clone(),
             save_state_path: Some(cli.save_state_path.clone()),
             progress_interval: cli.progress_interval,
+            seed: cli.seed,
         };
         if let Err(err) = run_headless(&headless_cfg) {
             eprintln!("Headless run failed: {err}");
@@ -67,6 +88,8 @@ struct CliOptions {
     save_state_path: String,
     diag_interval: u32,
     progress_interval: u32,
+    seed: Option<u64>,
+    config_path: Option<String>,
 }
 
 impl Default for CliOptions {
@@ -79,6 +102,8 @@ impl Default for CliOptions {
             save_state_path: String::from("/tmp/evolenia_final.snap"),
             diag_interval: 300,
             progress_interval: 1000,
+            seed: None,
+            config_path: None,
         }
     }
 }
@@ -116,6 +141,20 @@ impl CliOptions {
                         if let Ok(v) = args[i + 1].parse::<u32>() {
                             options.diag_interval = v.max(1);
                         }
+                        i += 1;
+                    }
+                }
+                "--seed" => {
+                    if i + 1 < args.len() {
+                        if let Ok(v) = args[i + 1].parse::<u64>() {
+                            options.seed = Some(v);
+                        }
+                        i += 1;
+                    }
+                }
+                "--config" => {
+                    if i + 1 < args.len() {
+                        options.config_path = Some(args[i + 1].clone());
                         i += 1;
                     }
                 }

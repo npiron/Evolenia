@@ -3,9 +3,10 @@
 // Headless simulation runner for fast long-horizon batches.
 // ============================================================================
 
+use crate::config::SimulationParams;
 use crate::pipeline::{create_pipelines, Pipelines};
 use crate::state_io;
-use crate::world::{total_pixels, WORKGROUP_X, WORKGROUP_Y, WorldState, WORLD_HEIGHT, WORLD_WIDTH};
+use crate::world::{total_pixels, WorldState, WORKGROUP_X, WORKGROUP_Y, WORLD_HEIGHT, WORLD_WIDTH};
 use std::time::Instant;
 
 #[derive(Clone, Debug)]
@@ -14,6 +15,7 @@ pub struct HeadlessConfig {
     pub load_state_path: Option<String>,
     pub save_state_path: Option<String>,
     pub progress_interval: u32,
+    pub seed: Option<u64>,
 }
 
 impl Default for HeadlessConfig {
@@ -23,6 +25,7 @@ impl Default for HeadlessConfig {
             load_state_path: None,
             save_state_path: None,
             progress_interval: 5000,
+            seed: None,
         }
     }
 }
@@ -55,7 +58,7 @@ pub fn run_headless(config: &HeadlessConfig) -> Result<(), String> {
     ))
     .map_err(|e| format!("Failed to create headless device: {e}"))?;
 
-    let mut world = WorldState::new(&device);
+    let mut world = WorldState::new_with_config(&device, config.seed, &SimulationParams::default());
     if let Some(path) = &config.load_state_path {
         let snap = state_io::load_snapshot(path)
             .map_err(|e| format!("Failed to load state {}: {}", path, e))?;
@@ -66,9 +69,9 @@ pub fn run_headless(config: &HeadlessConfig) -> Result<(), String> {
 
     let pipelines = create_pipelines(&device, &world, wgpu::TextureFormat::Rgba8Unorm);
 
-    let dispatch_x = (WORLD_WIDTH + WORKGROUP_X - 1) / WORKGROUP_X;
-    let dispatch_y = (WORLD_HEIGHT + WORKGROUP_Y - 1) / WORKGROUP_Y;
-    let dispatch_linear = (total_pixels() + 255) / 256;
+    let dispatch_x = WORLD_WIDTH.div_ceil(WORKGROUP_X);
+    let dispatch_y = WORLD_HEIGHT.div_ceil(WORKGROUP_Y);
+    let dispatch_linear = total_pixels().div_ceil(256);
 
     log::info!(
         "Headless run started: {} frames on {}x{}",
