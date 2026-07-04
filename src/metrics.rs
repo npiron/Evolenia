@@ -18,6 +18,7 @@ pub struct SimDiagnostics {
     pub live_fraction: f32,
     pub max_mass: f32,
     pub avg_mass_live: f32, // average mass over live pixels only
+    pub mass_drift_pct: f32, // deviation from target: (actual - target) / target * 100
 
     // Energy
     pub avg_energy: f32, // over live pixels
@@ -201,6 +202,7 @@ impl SimDiagnostics {
             live_fraction,
             max_mass,
             avg_mass_live,
+            mass_drift_pct: 0.0, // computed later via with_target_mass()
             avg_energy,
             min_energy_live,
             starving_fraction,
@@ -219,6 +221,15 @@ impl SimDiagnostics {
             total_energy: total_energy_sum as f32,
             energy_flux,
         }
+    }
+
+    /// Compute mass drift vs target (call after from_snapshot).
+    /// Positive = surplus, negative = deficit.
+    pub fn with_target_mass(mut self, target_mass: f32) -> Self {
+        if target_mass > 1e-6 {
+            self.mass_drift_pct = (self.total_mass - target_mass) / target_mass * 100.0;
+        }
+        self
     }
 
     /// Log all diagnostics at INFO level, with optional delta from previous snapshot.
@@ -241,10 +252,11 @@ impl SimDiagnostics {
         }
 
         log::info!(
-            "POPULATION: mass={:.0}/{:.0} ({:.1}%) | live={} ({:.1}%) | max_m={:.3} | avg_m_live={:.3}",
+            "POPULATION: mass={:.0}/{:.0} ({:.1}%, drift={:+.1}%) | live={} ({:.1}%) | max_m={:.3} | avg_m_live={:.3}",
             self.total_mass,
             target_mass,
             self.total_mass / target_mass * 100.0,
+            self.mass_drift_pct,
             self.live_pixels,
             self.live_fraction * 100.0,
             self.max_mass,

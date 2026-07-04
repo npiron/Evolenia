@@ -43,13 +43,19 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let r = resource_map[i];
     let m = mass[i];
 
-    // Discrete Laplacian for diffusion (5-point stencil)
+    // Discrete Laplacian for diffusion (5-point stencil).
+    //
+    // SCALING NOTE: The division by LAPLACIAN_SCALE = 4.0 is a deliberate
+    // re-parameterisation of the standard 5-point stencil (which would
+    // normally divide by h² = 1.0).  The `diffusion` uniform already
+    // absorbs this factor.  When comparing with Gray-Scott literature,
+    // remember that `D_literature ≈ D_here × 4`.
+    const LAPLACIAN_SCALE: f32 = 4.0;
     let r_right = resource_map[idx(x + 1, y)];
     let r_left  = resource_map[idx(x - 1, y)];
     let r_up    = resource_map[idx(x, y - 1)];
     let r_down  = resource_map[idx(x, y + 1)];
-
-    let laplacian = (r_right + r_left + r_up + r_down - 4.0 * r) / 4.0;
+    let laplacian = (r_right + r_left + r_up + r_down - LAPLACIAN_SCALE * r) / LAPLACIAN_SCALE;
 
     // Gray-Scott dynamics (parameterized via uniforms):
     // - Diffusion: nutrients spread spatially

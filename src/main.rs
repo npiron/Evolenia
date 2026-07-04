@@ -7,7 +7,6 @@ mod app;
 mod camera;
 mod config;
 mod headless;
-mod input;
 mod lab;
 mod lab_ui;
 mod metrics;

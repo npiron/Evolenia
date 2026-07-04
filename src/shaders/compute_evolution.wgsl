@@ -200,6 +200,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // max_r=13 enables proper Lenia patterns (orbium, geminium, etc.)
     // which require effective radii of 10-15 pixels.
     // 27×27 = 729 samples per pixel — fast enough on modern GPUs.
+    // Four-tier kernel interpolation: smooth blending between 4 anchor
+    // radii to support genomes with r ∈ [3, 15] without per-pixel kernel
+    // recomputation. Each tier maps to a pre-defined ring-kernel radius
+    // and the genome's actual r value blends between adjacent tiers.
     let r_small  = 3.0;
     let r_mid    = 6.0;
     let r_large  = 10.0;
@@ -262,6 +266,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Biologically: organisms thrive at density μ, tolerate ±σ
     let growth_raw = exp(-((U - mu) * (U - mu)) / (2.0 * sigma * sigma));
     let resource_gate = smoothstep(0.08, 0.35, resource_map[i]);
+    // resource_gate: 0 when resource ≤ 0.08 (desert), 1 when ≥ 0.35 (fertile).
+    // Prevents growth in nutrient-depleted zones — creates spatial selection pressure.
     let dM = (2.0 * growth_raw - 1.0) * resource_gate; // ∈ [-1, +1], resource-limited
     var mass_candidate = clamp(m + params.dt * dM, 0.0, 1.0);
 
@@ -285,9 +291,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     var absorption = resource_map[i] * m * (0.045 + prey_bonus);
 
     // Entropy-energy coupling:
-    // - Diverse neighborhoods get better energy uptake.
-    // - Homogeneous neighborhoods pay extra metabolic tax.
-    // Effect is bounded (±30%) for stability.
+    // - Diverse neighborhoods get better energy uptake (up to +30%).
+    // - Homogeneous neighborhoods pay extra metabolic tax (up to +30%).
+    // Effect is bounded (±30%) for stability — prevents feedback loops.
     let entropy = local_diversity_entropy(x, y);
     let entropy_bonus = clamp(1.0 + 0.25 * entropy, 0.70, 1.30);
     let homogeneity_tax = clamp(1.0 + 0.20 * (1.0 - entropy), 0.70, 1.30);
@@ -308,6 +314,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // ================== MASS-CONSERVATIVE ADVECTION ==================
     // Mass is TRANSFERRED, never copied. Conservation: flux_in = flux_out
     let vel = velocity[i];
+    // agg_mobility trade-off: aggressive organisms move slower (metabolic
+    // cost of predation apparatus). At agg=1.0, mobility drops to 0.05
+    // (near-immobile). At agg=0.0, mobility = 1.0 (full speed).
     let self_mobility = clamp(1.0 - params.agg_mobility * agg, 0.05, 1.0);
     let vel_eff = vel * self_mobility;
 
@@ -350,8 +359,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     mass_new = clamp(mass_new, 0.0, 1.0);
 
     // Anti-uniformization guards:
-    // 1) Avoid spontaneous births in isolated near-empty cells.
-    // 2) Prune very low-mass dust to prevent whole-screen thin films.
+    // 1) Spontaneous-birth prevention: isolated near-empty cells with no
+    //    immigration and weak growth are reset to zero. Thresholds tuned
+    //    empirically — m<0.003 ≈ dust, flux<0.0015 ≈ negligible flow,
+    //    growth<0.98 ≈ not actively thriving.
+    // 2) Dust pruning: very low-mass cells with no incoming flux are
+    //    eliminated to prevent whole-screen thin films.
     if (m < 0.003 && total_flux_in < 0.0015 && growth_raw < 0.98) {
         mass_new = 0.0;
     }
@@ -359,55 +372,82 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         mass_new = 0.0;
     }
 
-    // ================== DNA ADVECTION — STOCHASTIC SEGREGATION ==================
-    // When mass flows from neighbor to self, the neighbor's genome can
-    // "colonize" this cell. Probability proportional to flux vs the cell's
-    // PRE-advection mass (mass_candidate), not post-advection (mass_new).
+    // ================== DNA ADVECTION — WEIGHTED STOCHASTIC SEGREGATION ==================
+    // A single weighted random draw selects which genome colonises this cell.
+    // This is mathematically cleaner than sequential per-neighbour replacement
+    // (which biased the last neighbour checked).
     //
-    // Fix: using mass_new (post-advection) underestimates colonization probability
-    // because mass_new = mass_candidate + flux_in - flux_out, inflating the denominator.
-    // The correct reference is mass_candidate (the cell's own biomass before
-    // receiving immigrants), which gives the true immigrant-to-native ratio.
+    // Weights: self = immigration_base (cell's pre-advection mass),
+    //          each neighbour = fi (incoming flux, capped at mn/12 for
+    //          consistency with the mass advection pass).
+    // Total = immigration_base + Σ fi.
     //
-    // Biology: this implements spatial heredity via mass transport.
+    // Biology: spatial heredity via mass transport — the genome of the
+    // dominant mass donor takes over the cell, or the cell keeps its own
+    // genome if local mass dominates.
+
     var genome_a_new = ga;
     var genome_b_new = gb;
 
     var seed = base_seed;
-    let immigration_base = mass_candidate + 0.001; // pre-advection mass for colonization probability
-    // Genome advection — unrolled
+    let immigration_base = mass_candidate + 0.001; // pre-advection mass for colonisation probability
+
+    // --- Compute incoming flux + neighbour genomes (4 cardinal directions) ---
     // right
+    var fi_r = 0.0; var ga_r = ga; var gb_r = gb;
     { let ni = idx(x + 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
-            let neigh_agg = genome_a_in[ni].w;
-            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
-            let vn_eff = vn * neigh_mobility;
-            let fi = clamp(dot(vn_eff, vec2<f32>(-1.0, 0.0)), 0.0, mn / 4.0);
-      if (fi > 0.001) { let p = fi / immigration_base; seed = pcg_hash(seed + 1u);
-        if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
+      let na = genome_a_in[ni].w;
+      let nm = clamp(1.0 - params.agg_mobility * na, 0.05, 1.0);
+      fi_r = clamp(dot(vn * nm, vec2<f32>(-1.0, 0.0)), 0.0, mn / 12.0);
+      ga_r = genome_a_in[ni]; gb_r = genome_b_in[ni]; }
+
     // left
+    var fi_l = 0.0; var ga_l = ga; var gb_l = gb;
     { let ni = idx(x - 1, y); let vn = velocity[ni]; let mn = mass_in[ni];
-            let neigh_agg = genome_a_in[ni].w;
-            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
-            let vn_eff = vn * neigh_mobility;
-            let fi = clamp(dot(vn_eff, vec2<f32>(1.0, 0.0)), 0.0, mn / 4.0);
-      if (fi > 0.001) { let p = fi / immigration_base; seed = pcg_hash(seed + 2u);
-        if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
+      let na = genome_a_in[ni].w;
+      let nm = clamp(1.0 - params.agg_mobility * na, 0.05, 1.0);
+      fi_l = clamp(dot(vn * nm, vec2<f32>(1.0, 0.0)), 0.0, mn / 12.0);
+      ga_l = genome_a_in[ni]; gb_l = genome_b_in[ni]; }
+
     // down
+    var fi_d = 0.0; var ga_d = ga; var gb_d = gb;
     { let ni = idx(x, y + 1); let vn = velocity[ni]; let mn = mass_in[ni];
-            let neigh_agg = genome_a_in[ni].w;
-            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
-            let vn_eff = vn * neigh_mobility;
-            let fi = clamp(dot(vn_eff, vec2<f32>(0.0, -1.0)), 0.0, mn / 4.0);
-      if (fi > 0.001) { let p = fi / immigration_base; seed = pcg_hash(seed + 3u);
-        if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
+      let na = genome_a_in[ni].w;
+      let nm = clamp(1.0 - params.agg_mobility * na, 0.05, 1.0);
+      fi_d = clamp(dot(vn * nm, vec2<f32>(0.0, -1.0)), 0.0, mn / 12.0);
+      ga_d = genome_a_in[ni]; gb_d = genome_b_in[ni]; }
+
     // up
+    var fi_u = 0.0; var ga_u = ga; var gb_u = gb;
     { let ni = idx(x, y - 1); let vn = velocity[ni]; let mn = mass_in[ni];
-            let neigh_agg = genome_a_in[ni].w;
-            let neigh_mobility = clamp(1.0 - params.agg_mobility * neigh_agg, 0.05, 1.0);
-            let vn_eff = vn * neigh_mobility;
-            let fi = clamp(dot(vn_eff, vec2<f32>(0.0, 1.0)), 0.0, mn / 4.0);
-      if (fi > 0.001) { let p = fi / immigration_base; seed = pcg_hash(seed + 4u);
-        if (rand01(seed) < p) { genome_a_new = genome_a_in[ni]; genome_b_new = genome_b_in[ni]; } } }
+      let na = genome_a_in[ni].w;
+      let nm = clamp(1.0 - params.agg_mobility * na, 0.05, 1.0);
+      fi_u = clamp(dot(vn * nm, vec2<f32>(0.0, 1.0)), 0.0, mn / 12.0);
+      ga_u = genome_a_in[ni]; gb_u = genome_b_in[ni]; }
+
+    // Filter negligible fluxes (noise floor prevents spurious colonisation)
+    if (fi_r < 0.001) { fi_r = 0.0; }
+    if (fi_l < 0.001) { fi_l = 0.0; }
+    if (fi_d < 0.001) { fi_d = 0.0; }
+    if (fi_u < 0.001) { fi_u = 0.0; }
+
+    // Weighted random selection: single draw from cumulative distribution
+    let total_weight = immigration_base + fi_r + fi_l + fi_d + fi_u;
+    var selected: u32 = 0u; // 0 = keep own genome
+    if (total_weight > 0.0) {
+        seed = pcg_hash(seed + 99u);
+        let r = rand01(seed) * total_weight;
+        var cum = immigration_base;           // self
+        if (r >= cum) { cum += fi_r; selected = 1u; }  // right
+        if (r >= cum) { cum += fi_l; selected = 2u; }  // left
+        if (r >= cum) { cum += fi_d; selected = 3u; }  // down
+        if (r >= cum) { cum += fi_u; selected = 4u; }  // up
+    }
+    // Apply winning genome (selected=0 → keep current, already set)
+    if      (selected == 1u) { genome_a_new = ga_r; genome_b_new = gb_r; }
+    else if (selected == 2u) { genome_a_new = ga_l; genome_b_new = gb_l; }
+    else if (selected == 3u) { genome_a_new = ga_d; genome_b_new = gb_d; }
+    else if (selected == 4u) { genome_a_new = ga_u; genome_b_new = gb_u; }
 
     // ================== MUTATIONS ==================
     // Only living cells mutate (dead cells are inert)

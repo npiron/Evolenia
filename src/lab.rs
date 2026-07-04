@@ -24,6 +24,7 @@ pub struct MetricsRecord {
     pub time_ms: f64,
     pub fps: f32,
     pub total_mass: f32,
+    pub mass_drift_pct: f32,
     pub avg_energy: f32,
     pub entropy: f32,
     pub species: usize,
@@ -48,13 +49,15 @@ pub struct MetricsRecord {
 
 impl MetricsRecord {
     pub fn csv_header() -> &'static str {
-        "frame,time_ms,fps,total_mass,avg_energy,entropy,species,live_pixels,live_fraction,predator_fraction,avg_resource,mass_std_dev,avg_radius,avg_mu,avg_sigma,avg_aggressivity,avg_mutation_rate,prey_fraction,opportunist_fraction,effective_diversity,genome_variance,total_energy,energy_flux"
+        "frame,time_ms,fps,total_mass,mass_drift_pct,avg_energy,entropy,species,live_pixels,live_fraction,predator_fraction,avg_resource,mass_std_dev,avg_radius,avg_mu,avg_sigma,avg_aggressivity,avg_mutation_rate,prey_fraction,opportunist_fraction,effective_diversity,genome_variance,total_energy,energy_flux"
     }
 
     pub fn to_csv_line(&self) -> String {
         format!(
-            "{},{:.1},{:.1},{:.2},{:.4},{:.3},{},{},{:.4},{:.4},{:.4},{:.5},{:.3},{:.4},{:.4},{:.4},{:.6},{:.4},{:.4},{:.3},{:.5},{:.2},{:.5}",
-            self.frame, self.time_ms, self.fps, self.total_mass, self.avg_energy,
+            "{},{:.1},{:.1},{:.2},{:.2},{:.4},{:.3},{},{},{:.4},{:.4},{:.4},{:.5},{:.3},{:.4},{:.4},{:.4},{:.6},{:.4},{:.4},{:.3},{:.5},{:.2},{:.5}",
+            self.frame, self.time_ms, self.fps, self.total_mass,
+            self.mass_drift_pct,
+            self.avg_energy,
             self.entropy, self.species, self.live_pixels, self.live_fraction,
             self.predator_fraction, self.avg_resource, self.mass_std_dev,
             self.avg_radius, self.avg_mu, self.avg_sigma,
@@ -117,6 +120,9 @@ pub struct LabState {
     pub show_lab_ui: bool,
     pub show_analysis_panel: bool,
     pub show_logs_panel: bool,
+    pub hud_mode: u8, // 0 = off, 1 = minimal, 2 = NES retro
+    pub dark_mode: bool,
+    pub show_legend: bool,
 
     // -- Actions --
     pub restart_requested: bool,
@@ -151,13 +157,16 @@ impl Default for LabState {
             run_active: false,
 
             metrics_history: Vec::with_capacity(10_000),
-            metrics_sample_interval: 300,
+            metrics_sample_interval: 50,
 
             events: Vec::with_capacity(1_000),
 
             show_lab_ui: true,
-            show_analysis_panel: false,
+            show_analysis_panel: true,
             show_logs_panel: true,
+            hud_mode: 1, // minimal by default
+            dark_mode: false,
+            show_legend: true,
 
             restart_requested: false,
             step_requested: false,
@@ -236,6 +245,7 @@ impl LabState {
             time_ms,
             fps,
             total_mass: diag.total_mass,
+            mass_drift_pct: diag.mass_drift_pct,
             avg_energy: diag.avg_energy,
             entropy: diag.genetic_entropy,
             species: diag.species_count,
@@ -259,9 +269,32 @@ impl LabState {
         self.metrics_history.push(record);
     }
 
-    /// Log an event.
+    /// Log an event. Consecutive PARAM_CHANGE events for the same parameter
+    /// are coalesced (only the last value is kept) to avoid noise from slider drags.
     pub fn log_event(&mut self, frame: u32, event_type: &str, details: &str) {
         let time_ms = self.run_start.elapsed().as_secs_f64() * 1000.0;
+
+        // Coalesce consecutive PARAM_CHANGE for the same parameter
+        if event_type == "PARAM_CHANGE" {
+            let param_name = details.split('=').next().unwrap_or("");
+            if let Some(last) = self.events.last() {
+                if last.event_type == "PARAM_CHANGE" {
+                    let last_param = last.details.split('=').next().unwrap_or("");
+                    if param_name == last_param {
+                        // Replace with updated value
+                        let last_idx = self.events.len() - 1;
+                        self.events[last_idx] = LabEvent {
+                            frame,
+                            time_ms,
+                            event_type: event_type.to_string(),
+                            details: details.to_string(),
+                        };
+                        return;
+                    }
+                }
+            }
+        }
+
         self.events.push(LabEvent {
             frame,
             time_ms,
@@ -462,39 +495,49 @@ impl LabState {
         let content =
             fs::read_to_string(path).map_err(|e| format!("Failed to read {:?}: {}", path, e))?;
         let mut records = Vec::new();
+        let mut is_new_format = false;
         for (i, line) in content.lines().enumerate() {
             if i == 0 {
+                // Detect format: new CSVs have "mass_drift_pct" in the header
+                is_new_format = line.contains("mass_drift_pct");
                 continue;
             } // skip header
             let fields: Vec<&str> = line.split(',').collect();
             if fields.len() < 17 {
                 continue;
             }
+            let (fi_avg_e, fi_ent, fi_sp, fi_lp, fi_lf, fi_pf, fi_ar, fi_msd,
+                 fi_r, fi_mu, fi_sig, fi_agg, fi_mut, fi_prey, fi_opp, fi_div, fi_var, fi_te, fi_ef) =
+            if is_new_format {
+                (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)
+            } else {
+                (4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22)
+            };
             let record = MetricsRecord {
                 frame: fields[0].parse().unwrap_or(0),
                 time_ms: fields[1].parse().unwrap_or(0.0),
                 fps: fields[2].parse().unwrap_or(0.0),
                 total_mass: fields[3].parse().unwrap_or(0.0),
-                avg_energy: fields[4].parse().unwrap_or(0.0),
-                entropy: fields[5].parse().unwrap_or(0.0),
-                species: fields[6].parse().unwrap_or(0),
-                live_pixels: fields[7].parse().unwrap_or(0),
-                live_fraction: fields[8].parse().unwrap_or(0.0),
-                predator_fraction: fields[9].parse().unwrap_or(0.0),
-                avg_resource: fields[10].parse().unwrap_or(0.0),
-                mass_std_dev: fields[11].parse().unwrap_or(0.0),
-                avg_radius: fields[12].parse().unwrap_or(0.0),
-                avg_mu: fields[13].parse().unwrap_or(0.0),
-                avg_sigma: fields[14].parse().unwrap_or(0.0),
-                avg_aggressivity: fields[15].parse().unwrap_or(0.0),
-                avg_mutation_rate: fields[16].parse().unwrap_or(0.0),
-                // Phase 1 eco metrics (default 0 for backward compat with old CSVs)
-                prey_fraction: fields.get(17).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                opportunist_fraction: fields.get(18).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                effective_diversity: fields.get(19).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                genome_variance: fields.get(20).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                total_energy: fields.get(21).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                energy_flux: fields.get(22).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                mass_drift_pct: if is_new_format { fields.get(4).and_then(|s| s.parse().ok()).unwrap_or(0.0) } else { 0.0 },
+                avg_energy: fields.get(fi_avg_e).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                entropy: fields.get(fi_ent).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                species: fields.get(fi_sp).and_then(|s| s.parse().ok()).unwrap_or(0),
+                live_pixels: fields.get(fi_lp).and_then(|s| s.parse().ok()).unwrap_or(0),
+                live_fraction: fields.get(fi_lf).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                predator_fraction: fields.get(fi_pf).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                avg_resource: fields.get(fi_ar).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                mass_std_dev: fields.get(fi_msd).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                avg_radius: fields.get(fi_r).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                avg_mu: fields.get(fi_mu).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                avg_sigma: fields.get(fi_sig).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                avg_aggressivity: fields.get(fi_agg).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                avg_mutation_rate: fields.get(fi_mut).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                prey_fraction: fields.get(fi_prey).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                opportunist_fraction: fields.get(fi_opp).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                effective_diversity: fields.get(fi_div).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                genome_variance: fields.get(fi_var).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                total_energy: fields.get(fi_te).and_then(|s| s.parse().ok()).unwrap_or(0.0),
+                energy_flux: fields.get(fi_ef).and_then(|s| s.parse().ok()).unwrap_or(0.0),
             };
             records.push(record);
         }

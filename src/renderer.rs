@@ -28,9 +28,17 @@ pub struct HudPrepareConfig<'a> {
     pub params: &'a SimulationParams,
     pub frame: u32,
     pub fps: f32,
-    pub camera_zoom: f32,
     pub win_w: u32,
     pub win_h: u32,
+    pub hud_mode: u8,
+    // NES HUD metrics
+    pub nes_species: usize,
+    pub nes_total_mass: f32,
+    pub nes_entropy: f32,
+    pub nes_avg_energy: f32,
+    pub nes_live_fraction: f32,
+    pub nes_predator_fraction: f32,
+    pub nes_prey_fraction: f32,
 }
 
 impl HudRenderer {
@@ -81,10 +89,18 @@ impl HudRenderer {
             },
         );
 
-        let hud_text = build_hud_text(config.params, config.frame, config.fps, config.camera_zoom);
+        // Mode 0: off, Mode 1: deprecated (treated as off), Mode 2: NES retro
+        let (hud_text, font_size, text_color, x_pos, y_pos) = match config.hud_mode {
+            2 => build_nes_hud(config),
+            _ => {
+                // Mode 0 or 1 — nothing to render
+                return false;
+            }
+        };
 
         // Larger font for better readability (was 14.0/18.0)
-        let mut text_buf = TextBuffer::new(&mut self.font_system, Metrics::new(18.0, 24.0));
+        let mut text_buf =
+            TextBuffer::new(&mut self.font_system, Metrics::new(font_size, font_size * 1.35));
         text_buf.set_size(
             &mut self.font_system,
             Some(config.win_w as f32),
@@ -106,8 +122,8 @@ impl HudRenderer {
             &self.glyph_viewport,
             [TextArea {
                 buffer: &text_buf,
-                left: 16.0,
-                top: 16.0,
+                left: x_pos,
+                top: y_pos,
                 scale: 1.0,
                 bounds: TextBounds {
                     left: 0,
@@ -115,7 +131,7 @@ impl HudRenderer {
                     right: config.win_w as i32,
                     bottom: config.win_h as i32,
                 },
-                default_color: GlyphColor::rgb(220, 220, 220),
+                default_color: text_color,
                 custom_glyphs: &[],
             }],
             &mut self.swash_cache,
@@ -145,8 +161,48 @@ impl HudRenderer {
     }
 }
 
-// ======================== HUD Text Builder ========================
+// ======================== NES Retro HUD ========================
 
+/// Build a NES-style retro HUD: black background bar at the bottom with green text.
+/// Returns (text, font_size, color, x_pos, y_pos).
+fn build_nes_hud(
+    config: &HudPrepareConfig<'_>,
+) -> (String, f32, GlyphColor, f32, f32) {
+    let nes_green = GlyphColor::rgb(0, 255, 60); // NES phosphor green
+    let font_size = 16.0;
+
+    let mode_name = visualization_mode_name(config.params.visualization_mode);
+    let pause_str = if config.params.paused { " ⏸" } else { "" };
+
+    let line1 = format!(
+        "┌──────────────────────────────────────────────────────────────────────────────┐\n\
+         │ FRAME:{:>7} │ FPS:{:>5} │ SP:{:>4} │ MASS:{:>8} │ ENT:{:>6} │ ENG:{:>6} │ LIVE:{:>4}% │\n\
+         │  PRED:{:>4}% │  PREY:{:>4}% │\n\
+         └──────────────────────────────────────────────────────────────────────────────┘\n\
+          MODE: {}{}",
+        config.frame,
+        config.fps as u32,
+        config.nes_species,
+        config.nes_total_mass as u32,
+        format!("{:.2}", config.nes_entropy),
+        format!("{:.2}", config.nes_avg_energy),
+        (config.nes_live_fraction * 100.0) as u32,
+        (config.nes_predator_fraction * 100.0) as u32,
+        (config.nes_prey_fraction * 100.0) as u32,
+        mode_name,
+        pause_str,
+    );
+
+    let line_count = 5.0;
+    let y_pos = config.win_h as f32 - (line_count * font_size * 1.35) - 12.0;
+    let x_pos = 8.0;
+
+    (line1, font_size, nes_green, x_pos, y_pos)
+}
+
+// ======================== HUD Text Builder (deprecated, kept for reference) ========================
+
+#[allow(dead_code)]
 fn build_hud_text(params: &SimulationParams, frame: u32, fps: f32, camera_zoom: f32) -> String {
     let pause_status = if params.paused { " [PAUSED]" } else { "" };
 
@@ -160,7 +216,7 @@ fn build_hud_text(params: &SimulationParams, frame: u32, fps: f32, camera_zoom: 
              • 1: Species Color  2: Energy  3: Mass  4: Diversity  5: Predator/Prey\n\
              \n\
              SIMULATION CONTROL:\n\
-             • Space: {}  |  R: Restart  |  H: Toggle HUD  |  ESC: Quit\n\
+             • Space: {}  |  R: Restart  |  H: Cycle HUD (off/minimal/NES)  |  ESC: Quit\n\
              • Speed: {}x (←/→ to adjust)  |  TimeStep: {:.2}x (↑/↓)\n\
              • Mutation Rate: {:.2}x ([/] to adjust)\n\
              \n\
