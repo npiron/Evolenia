@@ -21,7 +21,6 @@ pub struct SimulationParams {
 
     // -- Visualization --
     pub visualization_mode: u32,
-    pub show_extended_ui: bool,
 
     // -- Evolution / Mutation --
     pub mutation_rate: f32,
@@ -72,7 +71,6 @@ impl Default for SimulationParams {
             vsync: false,
 
             visualization_mode: 0,
-            show_extended_ui: false,
 
             mutation_rate: 0.5,
             predation_factor: 1.0,
@@ -211,7 +209,9 @@ pub struct TomlHeadlessConfig {
 
 /// Load a TOML config file and merge it into `SimulationParams`.
 /// Missing fields keep their defaults.
-pub fn load_toml_config(path: &str) -> Result<SimulationParams, String> {
+pub fn load_toml_config(
+    path: &str,
+) -> Result<(SimulationParams, Option<TomlHeadlessConfig>), String> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("Cannot read config file '{}': {}", path, e))?;
     let toml_cfg: TomlConfig =
@@ -280,40 +280,5 @@ pub fn load_toml_config(path: &str) -> Result<SimulationParams, String> {
     }
 
     log::info!("Loaded config from {}: {:?}", path, params.effective_seed());
-    Ok(params)
-}
-
-/// Generate a default config TOML file (for bootstrapping via CLI).
-#[allow(dead_code)]
-pub fn default_toml_config() -> String {
-    r#"# EvoLenia v2 — Configuration file (TOML)
-# All fields are optional — defaults are shown in comments.
-
-[simulation]
-# time_step = 1.0
-# mutation_rate = 0.5
-# predation_factor = 1.0
-# resource_diffusion = 0.08
-# resource_feed_rate = 0.012
-# resource_consumption = 0.06
-# mass_normalization_enabled = true
-# mass_damping = 0.3
-# target_mass_multiplier = 1.0
-# radius_cost_exponent = 1.3
-# agg_mobility_tradeoff = 0.3
-# starvation_severity = 0.03
-# num_seed_clusters = 30
-# seed_cluster_size = 1.0
-# initial_mass_fill = 0.15
-# seed = 42
-# use_fixed_seed = false
-# visualization_mode = 0
-# vsync = false
-
-[headless]
-# frames = 10000
-# progress_interval = 1000
-# save_state_path = "/tmp/evolenia_final.snap"
-"#
-    .to_string()
+    Ok((params, toml_cfg.headless))
 }

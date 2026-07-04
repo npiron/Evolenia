@@ -23,7 +23,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Autonomous",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.8, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.15, predation_factor: 0.5,
                 resource_diffusion: 0.08, resource_feed_rate: 0.012, resource_consumption: 0.045,
                 mass_normalization_enabled: true, mass_damping: 0.4, target_mass_multiplier: 0.85,
@@ -40,7 +40,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Autonomous",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 1.0, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.8, predation_factor: 1.5,
                 resource_diffusion: 0.12, resource_feed_rate: 0.018, resource_consumption: 0.04,
                 mass_normalization_enabled: false, mass_damping: 0.15, target_mass_multiplier: 1.2,
@@ -57,7 +57,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Autonomous",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.6, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.1, predation_factor: 0.3,
                 resource_diffusion: 0.06, resource_feed_rate: 0.014, resource_consumption: 0.035,
                 mass_normalization_enabled: true, mass_damping: 0.5, target_mass_multiplier: 0.7,
@@ -74,7 +74,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Autonomous",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 1.2, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 1.5, predation_factor: 0.8,
                 resource_diffusion: 0.15, resource_feed_rate: 0.022, resource_consumption: 0.03,
                 mass_normalization_enabled: false, mass_damping: 0.1, target_mass_multiplier: 1.5,
@@ -92,7 +92,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Predation",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 1.0, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.5, predation_factor: 2.5,
                 resource_diffusion: 0.07, resource_feed_rate: 0.016, resource_consumption: 0.07,
                 mass_normalization_enabled: true, mass_damping: 0.3, target_mass_multiplier: 1.0,
@@ -109,7 +109,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Predation",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 1.1, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 2.0, predation_factor: 3.0,
                 resource_diffusion: 0.08, resource_feed_rate: 0.020, resource_consumption: 0.08,
                 mass_normalization_enabled: true, mass_damping: 0.25, target_mass_multiplier: 1.1,
@@ -126,7 +126,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Predation",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.9, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.3, predation_factor: 4.0,
                 resource_diffusion: 0.05, resource_feed_rate: 0.008, resource_consumption: 0.10,
                 mass_normalization_enabled: true, mass_damping: 0.4, target_mass_multiplier: 0.8,
@@ -144,7 +144,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Explosive",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 1.3, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 2.5, predation_factor: 1.0,
                 resource_diffusion: 0.18, resource_feed_rate: 0.030, resource_consumption: 0.025,
                 mass_normalization_enabled: false, mass_damping: 0.05, target_mass_multiplier: 2.0,
@@ -161,7 +161,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Explosive",
             params: || SimulationParams {
                 paused: false, simulation_speed: 2, time_step: 1.5, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 5.0, predation_factor: 2.0,
                 resource_diffusion: 0.20, resource_feed_rate: 0.025, resource_consumption: 0.05,
                 mass_normalization_enabled: false, mass_damping: 0.02, target_mass_multiplier: 1.8,
@@ -178,7 +178,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Explosive",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 1.2, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 1.8, predation_factor: 1.5,
                 resource_diffusion: 0.10, resource_feed_rate: 0.035, resource_consumption: 0.06,
                 mass_normalization_enabled: true, mass_damping: 0.2, target_mass_multiplier: 1.3,
@@ -196,7 +196,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Stable",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.5, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.05, predation_factor: 0.2,
                 resource_diffusion: 0.04, resource_feed_rate: 0.010, resource_consumption: 0.03,
                 mass_normalization_enabled: true, mass_damping: 0.6, target_mass_multiplier: 0.6,
@@ -213,7 +213,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Stable",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.7, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.2, predation_factor: 0.4,
                 resource_diffusion: 0.06, resource_feed_rate: 0.014, resource_consumption: 0.04,
                 mass_normalization_enabled: true, mass_damping: 0.45, target_mass_multiplier: 0.75,
@@ -230,7 +230,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Stable",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.4, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.02, predation_factor: 0.1,
                 resource_diffusion: 0.03, resource_feed_rate: 0.008, resource_consumption: 0.025,
                 mass_normalization_enabled: true, mass_damping: 0.7, target_mass_multiplier: 0.5,
@@ -248,7 +248,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Special",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.9, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.6, predation_factor: 0.6,
                 resource_diffusion: 0.09, resource_feed_rate: 0.011, resource_consumption: 0.055,
                 mass_normalization_enabled: true, mass_damping: 0.35, target_mass_multiplier: 0.9,
@@ -265,7 +265,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Special",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.6, vsync: false,
-                visualization_mode: 2, show_extended_ui: false,
+                visualization_mode: 2,
                 mutation_rate: 0.3, predation_factor: 0.7,
                 resource_diffusion: 0.15, resource_feed_rate: 0.020, resource_consumption: 0.02,
                 mass_normalization_enabled: false, mass_damping: 0.08, target_mass_multiplier: 1.6,
@@ -282,7 +282,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Special",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.85, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.4, predation_factor: 0.5,
                 resource_diffusion: 0.07, resource_feed_rate: 0.013, resource_consumption: 0.05,
                 mass_normalization_enabled: true, mass_damping: 0.38, target_mass_multiplier: 0.85,
@@ -299,7 +299,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Special",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.75, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.25, predation_factor: 0.8,
                 resource_diffusion: 0.11, resource_feed_rate: 0.016, resource_consumption: 0.038,
                 mass_normalization_enabled: true, mass_damping: 0.3, target_mass_multiplier: 1.0,
@@ -317,7 +317,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Experimental",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 1.0, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.5, predation_factor: 1.0,
                 resource_diffusion: 0.08, resource_feed_rate: 0.012, resource_consumption: 0.06,
                 mass_normalization_enabled: true, mass_damping: 0.3, target_mass_multiplier: 1.0,
@@ -334,7 +334,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Experimental",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.9, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.45, predation_factor: 1.2,
                 resource_diffusion: 0.045, resource_feed_rate: 0.010, resource_consumption: 0.075,
                 mass_normalization_enabled: true, mass_damping: 0.42, target_mass_multiplier: 0.78,
@@ -351,7 +351,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Experimental",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.95, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.9, predation_factor: 1.8,
                 resource_diffusion: 0.095, resource_feed_rate: 0.017, resource_consumption: 0.065,
                 mass_normalization_enabled: true, mass_damping: 0.22, target_mass_multiplier: 1.05,
@@ -368,7 +368,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Experimental",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.85, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.35, predation_factor: 0.9,
                 resource_diffusion: 0.025, resource_feed_rate: 0.013, resource_consumption: 0.055,
                 mass_normalization_enabled: true, mass_damping: 0.50, target_mass_multiplier: 0.72,
@@ -385,7 +385,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Experimental",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 0.8, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 0.4, predation_factor: 1.2,
                 resource_diffusion: 0.04, resource_feed_rate: 0.006, resource_consumption: 0.08,
                 mass_normalization_enabled: true, mass_damping: 0.5, target_mass_multiplier: 0.6,
@@ -402,7 +402,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Experimental",
             params: || SimulationParams {
                 paused: false, simulation_speed: 1, time_step: 1.1, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 1.0, predation_factor: 0.6,
                 resource_diffusion: 0.12, resource_feed_rate: 0.028, resource_consumption: 0.025,
                 mass_normalization_enabled: false, mass_damping: 0.1, target_mass_multiplier: 1.5,
@@ -419,7 +419,7 @@ pub fn preset_catalog() -> Vec<PresetInfo> {
             category: "Experimental",
             params: || SimulationParams {
                 paused: false, simulation_speed: 3, time_step: 2.0, vsync: false,
-                visualization_mode: 0, show_extended_ui: false,
+                visualization_mode: 0,
                 mutation_rate: 1.2, predation_factor: 1.0,
                 resource_diffusion: 0.10, resource_feed_rate: 0.018, resource_consumption: 0.05,
                 mass_normalization_enabled: true, mass_damping: 0.2, target_mass_multiplier: 1.2,

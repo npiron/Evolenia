@@ -4,7 +4,8 @@
 // ============================================================================
 
 use crate::config::SimulationParams;
-use crate::pipeline::{create_pipelines, Pipelines};
+use crate::pipeline::create_pipelines;
+use crate::simulation::encode_simulation_passes;
 use crate::state_io;
 use crate::world::{total_pixels, WorldState, WORKGROUP_X, WORKGROUP_Y, WORLD_HEIGHT, WORLD_WIDTH};
 use std::time::Instant;
@@ -145,63 +146,4 @@ pub fn run_headless(config: &HeadlessConfig) -> Result<(), String> {
     }
 
     Ok(())
-}
-
-fn encode_simulation_passes(
-    encoder: &mut wgpu::CommandEncoder,
-    pipelines: &Pipelines,
-    cur: usize,
-    dispatch_x: u32,
-    dispatch_y: u32,
-    dispatch_linear: u32,
-) {
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("velocity_pass"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipelines.velocity_pipeline);
-        pass.set_bind_group(0, &pipelines.velocity_bind_groups[cur], &[]);
-        pass.dispatch_workgroups(dispatch_x, dispatch_y, 1);
-    }
-
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("evolution_pass"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipelines.evolution_pipeline);
-        pass.set_bind_group(0, &pipelines.evolution_bind_groups[cur], &[]);
-        pass.dispatch_workgroups(dispatch_x, dispatch_y, 1);
-    }
-
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("resources_pass"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipelines.resources_pipeline);
-        pass.set_bind_group(0, &pipelines.resources_bind_groups[cur], &[]);
-        pass.dispatch_workgroups(dispatch_x, dispatch_y, 1);
-    }
-
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("sum_mass_pass"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipelines.sum_mass_pipeline);
-        pass.set_bind_group(0, &pipelines.normalize_bind_groups[cur], &[]);
-        pass.dispatch_workgroups(dispatch_linear, 1, 1);
-    }
-
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("normalize_pass"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipelines.normalize_pipeline);
-        pass.set_bind_group(0, &pipelines.normalize_bind_groups[cur], &[]);
-        pass.dispatch_workgroups(dispatch_linear, 1, 1);
-    }
 }

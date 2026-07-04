@@ -10,7 +10,6 @@ use glyphon::{
 };
 
 use crate::config::{visualization_mode_name, SimulationParams};
-use crate::world::{target_total_mass, WORLD_HEIGHT, WORLD_WIDTH};
 
 /// All glyphon resources needed for HUD text rendering.
 pub struct HudRenderer {
@@ -198,56 +197,4 @@ fn build_nes_hud(config: &HudPrepareConfig<'_>) -> (String, f32, GlyphColor, f32
     let x_pos = 8.0;
 
     (line1, font_size, nes_green, x_pos, y_pos)
-}
-
-// ======================== HUD Text Builder (deprecated, kept for reference) ========================
-
-#[allow(dead_code)]
-fn build_hud_text(params: &SimulationParams, frame: u32, fps: f32, camera_zoom: f32) -> String {
-    let pause_status = if params.paused { " [PAUSED]" } else { "" };
-
-    if params.show_extended_ui {
-        format!(
-            "━━━ EvoLenia v2.0 — Extended HUD ━━━\n\
-             Frame: {}   FPS: {:.0}{}  |  Zoom: {:.2}x\n\
-             \n\
-             VISUALIZATION (1-5 / Tab):\n\
-             • Current: {} (<)✓(>)\n\
-             • 1: Species Color  2: Energy  3: Mass  4: Diversity  5: Predator/Prey\n\
-             \n\
-             SIMULATION CONTROL:\n\
-             • Space: {}  |  R: Restart  |  H: Cycle HUD (off/minimal/NES)  |  ESC: Quit\n\
-             • Speed: {}x (←/→ to adjust)  |  TimeStep: {:.2}x (↑/↓)\n\
-             • Mutation Rate: {:.2}x ([/] to adjust)\n\
-             \n\
-             CAMERA:\n\
-             • Pan: WASD  |  Zoom: Q/E or Mouse Wheel\n\
-             • VSync: {} (V to toggle)\n\
-             \n\
-             WORLD: {}×{}  |  Target Mass: {:.0}",
-            frame,
-            fps,
-            pause_status,
-            camera_zoom,
-            visualization_mode_name(params.visualization_mode),
-            if params.paused { "Resume" } else { "Pause" },
-            params.simulation_speed,
-            params.time_step,
-            params.mutation_rate,
-            if params.vsync { "ON" } else { "OFF" },
-            WORLD_WIDTH,
-            WORLD_HEIGHT,
-            target_total_mass()
-        )
-    } else {
-        format!(
-            "Frame: {}   FPS: {:.0}{}   Zoom: {:.2}x\n\
-             Mode: {} (1-5/Tab) | Space: Pause | R: Restart | H: Help",
-            frame,
-            fps,
-            pause_status,
-            camera_zoom,
-            visualization_mode_name(params.visualization_mode),
-        )
-    }
 }

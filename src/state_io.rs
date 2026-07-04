@@ -75,7 +75,19 @@ fn write_vec_f32(file: &mut File, values: &[f32]) -> io::Result<()> {
 fn read_vec_f32(file: &mut File) -> io::Result<Vec<f32>> {
     let mut len_buf = [0u8; 8];
     file.read_exact(&mut len_buf)?;
-    let len = u64::from_le_bytes(len_buf) as usize;
+    let len = u64::from_le_bytes(len_buf);
+    // Sanity check: prevent allocation bombs from corrupted files
+    const MAX_ELEMENTS: u64 = 10_000_000;
+    if len > MAX_ELEMENTS {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Snapshot corrupted: vector length {} exceeds maximum {}",
+                len, MAX_ELEMENTS
+            ),
+        ));
+    }
+    let len = len as usize;
     let mut bytes = vec![0u8; len * std::mem::size_of::<f32>()];
     file.read_exact(&mut bytes)?;
     let mut values = Vec::with_capacity(len);

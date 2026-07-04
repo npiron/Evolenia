@@ -51,34 +51,6 @@ impl WorldState {
         self.current
     }
 
-    /// Index of the next (write) buffer.
-    #[allow(dead_code)]
-    pub fn next(&self) -> usize {
-        1 - self.current
-    }
-
-    /// Update per-step uniforms (static defaults).
-    /// Kept for backward-compatible headless runs without SimulationParams.
-    #[allow(dead_code)]
-    pub fn update_step_uniforms(&self, queue: &wgpu::Queue) {
-        let sim_params = SimParams {
-            width: WORLD_WIDTH,
-            height: WORLD_HEIGHT,
-            frame: self.frame,
-            dt: DT,
-            mutation_rate_mult: 1.0,
-            predation_factor: 1.0,
-            radius_cost_exp: 1.5,
-            agg_mobility: 0.3,
-            starvation_severity: 0.05,
-            _pad1: 0,
-            _pad2: 0,
-            _pad3: 0,
-        };
-        queue.write_buffer(&self.sim_params_buffer, 0, bytemuck::bytes_of(&sim_params));
-        queue.write_buffer(&self.mass_sum, 0, bytemuck::bytes_of(&[0u32; 2]));
-    }
-
     /// Update all uniforms using dynamic parameters from the Research Lab UI.
     pub fn update_step_uniforms_dynamic(&self, queue: &wgpu::Queue, params: &SimulationParams) {
         let sim_params = SimParams {

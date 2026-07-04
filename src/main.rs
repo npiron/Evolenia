@@ -12,6 +12,7 @@ mod lab_ui;
 mod metrics;
 mod pipeline;
 mod renderer;
+mod simulation;
 mod state_io;
 mod world;
 
@@ -33,13 +34,13 @@ fn main() {
     let cli = CliOptions::from_args(std::env::args().collect());
 
     // Load optional TOML config file
-    let config_params = cli
+    let (config_params, headless_toml) = cli
         .config_path
         .as_ref()
         .and_then(|path| match load_toml_config(path) {
-            Ok(p) => {
+            Ok((p, h)) => {
                 log::info!("Loaded config from {}", path);
-                Some(p)
+                Some((p, h))
             }
             Err(e) => {
                 log::warn!("Failed to load config from {}: {}", path, e);
@@ -49,7 +50,7 @@ fn main() {
         .unwrap_or_default();
 
     if cli.headless || cli.headless_then_gui {
-        let headless_cfg = HeadlessConfig {
+        let mut headless_cfg = HeadlessConfig {
             frames: cli.frames,
             load_state_path: cli.load_state_path.clone(),
             save_state_path: Some(cli.save_state_path.clone()),
@@ -57,6 +58,18 @@ fn main() {
             seed: cli.seed,
             sim_params: config_params.clone(),
         };
+        // Override with TOML headless section if present
+        if let Some(ref h) = headless_toml {
+            if let Some(f) = h.frames {
+                headless_cfg.frames = f;
+            }
+            if let Some(p) = h.progress_interval {
+                headless_cfg.progress_interval = p;
+            }
+            if let Some(ref p) = h.save_state_path {
+                headless_cfg.save_state_path = Some(p.clone());
+            }
+        }
         if let Err(err) = run_headless(&headless_cfg) {
             eprintln!("Headless run failed: {err}");
             std::process::exit(1);

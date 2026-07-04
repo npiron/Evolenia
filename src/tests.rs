@@ -1418,3 +1418,297 @@ mod integration_tests {
         }
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Tests added by improvement loop #2
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── Configuration Tests ──
+
+mod config_tests {
+    use crate::config::{
+        load_toml_config, PerturbationType, SimulationParams, TIME_STEP_MAX, VIS_MODE_COUNT,
+    };
+
+    #[test]
+    fn effective_seed_fixed() {
+        let p = SimulationParams {
+            use_fixed_seed: true,
+            fixed_seed_value: 42,
+            seed: Some(99),
+            ..Default::default()
+        };
+        assert_eq!(p.effective_seed(), Some(42));
+    }
+
+    #[test]
+    fn effective_seed_variable() {
+        let p = SimulationParams {
+            seed: Some(99),
+            ..Default::default()
+        };
+        assert_eq!(p.effective_seed(), Some(99));
+    }
+
+    #[test]
+    fn effective_seed_none() {
+        let p = SimulationParams::default();
+        assert_eq!(p.effective_seed(), None);
+    }
+
+    #[test]
+    fn load_toml_partial_override() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.toml");
+        let toml_content = r#"
+[simulation]
+time_step = 2.0
+mutation_rate = 0.8
+[headless]
+frames = 500
+"#;
+        std::fs::write(&path, toml_content).unwrap();
+        let (params, headless) =
+            load_toml_config(path.to_str().unwrap()).expect("should load valid TOML");
+
+        assert_eq!(params.time_step, 2.0);
+        assert_eq!(params.mutation_rate, 0.8);
+        assert_eq!(
+            params.predation_factor,
+            SimulationParams::default().predation_factor
+        );
+        assert!(headless.is_some());
+        assert_eq!(headless.unwrap().frames, Some(500));
+    }
+
+    #[test]
+    fn load_toml_clamp_bounds() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("clamp.toml");
+        let toml_content = r#"
+[simulation]
+time_step = 100.0
+mutation_rate = -5.0
+initial_mass_fill = 2.0
+num_seed_clusters = 0
+"#;
+        std::fs::write(&path, toml_content).unwrap();
+        let (params, _) = load_toml_config(path.to_str().unwrap()).expect("should load valid TOML");
+
+        assert_eq!(params.time_step, TIME_STEP_MAX);
+        assert_eq!(params.mutation_rate, 0.0);
+        assert_eq!(params.initial_mass_fill, 0.9);
+        assert_eq!(params.num_seed_clusters, 1);
+    }
+
+    #[test]
+    fn load_toml_empty_simulation_section() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.toml");
+        std::fs::write(&path, "[simulation]\n").unwrap();
+        let (params, _) = load_toml_config(path.to_str().unwrap()).expect("should load valid TOML");
+        let default = SimulationParams::default();
+        assert_eq!(params.time_step, default.time_step);
+    }
+
+    #[test]
+    fn load_toml_file_not_found() {
+        let result = load_toml_config("/nonexistent/path/config.toml");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_toml_invalid_syntax() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("invalid.toml");
+        std::fs::write(&path, "this is not valid toml {{{[").unwrap();
+        let result = load_toml_config(path.to_str().unwrap());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn perturbation_type_count() {
+        assert_eq!(PerturbationType::all().len(), 5);
+    }
+
+    #[test]
+    fn perturbation_type_names() {
+        assert_eq!(PerturbationType::None.name(), "None");
+        assert_eq!(PerturbationType::Drought.name(), "Drought");
+        assert_eq!(PerturbationType::MassStorm.name(), "Mass Storm");
+    }
+
+    #[test]
+    fn visualization_mode_names() {
+        use crate::config::visualization_mode_name;
+        assert_eq!(visualization_mode_name(0), "Species Color");
+        assert_eq!(visualization_mode_name(8), "Debug Raw");
+        assert_eq!(visualization_mode_name(99), "Unknown");
+    }
+
+    #[test]
+    fn visualization_mode_clamped() {
+        let p = SimulationParams {
+            visualization_mode: 100 % VIS_MODE_COUNT,
+            ..Default::default()
+        };
+        assert_eq!(p.visualization_mode, 1);
+    }
+}
+
+// ── Camera Tests ──
+
+mod camera_tests {
+    use crate::camera::CameraState;
+
+    #[test]
+    fn default_state() {
+        let cam = CameraState::default();
+        assert_eq!(cam.offset, [0.0, 0.0]);
+        assert_eq!(cam.zoom, 1.0);
+    }
+
+    #[test]
+    fn pan_up() {
+        let mut cam = CameraState::default();
+        cam.apply_pan(true, false, false, false);
+        assert!(cam.offset[1] < 0.0);
+    }
+
+    #[test]
+    fn pan_down() {
+        let mut cam = CameraState::default();
+        cam.apply_pan(false, true, false, false);
+        assert!(cam.offset[1] > 0.0);
+    }
+
+    #[test]
+    fn pan_speed_inverse_to_zoom() {
+        let mut cam = CameraState {
+            zoom: 2.0,
+            ..Default::default()
+        };
+        cam.apply_pan(true, false, false, false);
+        let offset_at_zoom2 = cam.offset[1];
+
+        let mut cam2 = CameraState {
+            zoom: 1.0,
+            ..Default::default()
+        };
+        cam2.apply_pan(true, false, false, false);
+        assert!((offset_at_zoom2 * 2.0 - cam2.offset[1]).abs() < 1e-6);
+    }
+
+    #[test]
+    fn zoom_in() {
+        let mut cam = CameraState::default();
+        cam.apply_zoom_keys(true, false);
+        assert!(cam.zoom > 1.0);
+    }
+
+    #[test]
+    fn zoom_out() {
+        let mut cam = CameraState::default();
+        cam.apply_zoom_keys(false, true);
+        assert!(cam.zoom < 1.0);
+    }
+
+    #[test]
+    fn zoom_clamped_min() {
+        let mut cam = CameraState {
+            zoom: 0.11,
+            ..Default::default()
+        };
+        cam.apply_zoom_keys(false, true);
+        assert!(cam.zoom >= 0.1);
+    }
+
+    #[test]
+    fn zoom_clamped_max() {
+        let mut cam = CameraState {
+            zoom: 49.9,
+            ..Default::default()
+        };
+        cam.apply_zoom_keys(true, false);
+        assert!(cam.zoom <= 50.0);
+    }
+
+    #[test]
+    fn scroll_zoom() {
+        let mut cam = CameraState::default();
+        cam.apply_scroll(1.0);
+        assert!(cam.zoom > 1.0);
+    }
+
+    #[test]
+    fn uniforms_aspect_ratio() {
+        let cam = CameraState::default();
+        let u = cam.uniforms(1920, 1080);
+        assert!((u.aspect_ratio - 1920.0 / 1080.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn uniforms_zoom_passthrough() {
+        let cam = CameraState {
+            zoom: 2.5,
+            ..Default::default()
+        };
+        let u = cam.uniforms(800, 600);
+        assert_eq!(u.zoom, 2.5);
+    }
+}
+
+// ── State I/O Corruption Tests ──
+
+mod state_io_corruption_tests {
+    use crate::state_io;
+    use std::io::Write;
+
+    #[test]
+    fn load_truncated_magic() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("trunc_magic.snap");
+        std::fs::write(&path, b"EVO").unwrap();
+        assert!(state_io::load_snapshot(path.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn load_truncated_header() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("trunc_header.snap");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(b"EVOSNP01").unwrap();
+        f.write_all(&512u32.to_le_bytes()).unwrap();
+        // Missing height byte
+        f.write_all(&[0u8]).unwrap();
+        assert!(state_io::load_snapshot(path.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn load_corrupt_length_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("corrupt_len.snap");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(b"EVOSNP01").unwrap();
+        f.write_all(&512u32.to_le_bytes()).unwrap();
+        f.write_all(&512u32.to_le_bytes()).unwrap();
+        // Write a huge element count exceeding MAX_ELEMENTS (10M)
+        f.write_all(&10_000_001u64.to_le_bytes()).unwrap();
+        assert!(state_io::load_snapshot(path.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn load_wrong_dimensions() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wrong_dim.snap");
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(b"EVOSNP01").unwrap();
+        f.write_all(&256u32.to_le_bytes()).unwrap();
+        f.write_all(&256u32.to_le_bytes()).unwrap();
+        // Empty buffers (len=0) but wrong dimensions
+        for _ in 0..6 {
+            f.write_all(&0u64.to_le_bytes()).unwrap();
+        }
+        assert!(state_io::load_snapshot(path.to_str().unwrap()).is_err());
+    }
+}

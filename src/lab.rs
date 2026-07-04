@@ -370,7 +370,8 @@ impl LabState {
             env!("CARGO_PKG_VERSION"),
             WORLD_WIDTH,
             WORLD_HEIGHT,
-            serde_json::to_string_pretty(params).unwrap_or_default(),
+            serde_json::to_string_pretty(params)
+                .unwrap_or_else(|e| format!("[serialization error: {}]", e)),
             if let Some(m) = last_metrics {
                 format!(
                     "| Metric | Value |\n|--------|-------|\n\

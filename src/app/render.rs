@@ -6,8 +6,9 @@ use std::time::Instant;
 
 use crate::lab_ui;
 use crate::metrics::SimDiagnostics;
-use crate::pipeline::{create_pipelines, Pipelines};
+use crate::pipeline::create_pipelines;
 use crate::renderer::HudPrepareConfig;
+use crate::simulation::encode_simulation_passes;
 use crate::state_io;
 use crate::world::*;
 
@@ -399,7 +400,7 @@ pub fn redraw(state: &mut AppState) {
                 .lab
                 .run_dir
                 .join(format!("snapshot_frame{:06}.snap", state.world.frame));
-            match state_io::save_snapshot(path.to_str().unwrap_or("snapshot.snap"), &snap) {
+            match state_io::save_snapshot(&path.to_string_lossy(), &snap) {
                 Ok(()) => {
                     state.lab.set_status(format!("Snapshot saved: {:?}", path));
                     state.lab.log_event(
@@ -472,70 +473,4 @@ fn render_egui_pass(
     });
     let mut pass = pass.forget_lifetime();
     renderer.render(&mut pass, paint_jobs, screen_descriptor);
-}
-
-// ======================== Simulation Encoding ========================
-
-pub fn encode_simulation_passes(
-    encoder: &mut wgpu::CommandEncoder,
-    pipelines: &Pipelines,
-    cur: usize,
-    dispatch_x: u32,
-    dispatch_y: u32,
-    dispatch_linear: u32,
-) {
-    // Pass 1: Velocity field
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("velocity_pass"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipelines.velocity_pipeline);
-        pass.set_bind_group(0, &pipelines.velocity_bind_groups[cur], &[]);
-        pass.dispatch_workgroups(dispatch_x, dispatch_y, 1);
-    }
-
-    // Pass 2: Evolution
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("evolution_pass"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipelines.evolution_pipeline);
-        pass.set_bind_group(0, &pipelines.evolution_bind_groups[cur], &[]);
-        pass.dispatch_workgroups(dispatch_x, dispatch_y, 1);
-    }
-
-    // Pass 3: Resource dynamics
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("resources_pass"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipelines.resources_pipeline);
-        pass.set_bind_group(0, &pipelines.resources_bind_groups[cur], &[]);
-        pass.dispatch_workgroups(dispatch_x, dispatch_y, 1);
-    }
-
-    // Pass 4a: Sum total mass
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("sum_mass_pass"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipelines.sum_mass_pipeline);
-        pass.set_bind_group(0, &pipelines.normalize_bind_groups[cur], &[]);
-        pass.dispatch_workgroups(dispatch_linear, 1, 1);
-    }
-
-    // Pass 4b: Normalize mass
-    {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("normalize_pass"),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&pipelines.normalize_pipeline);
-        pass.set_bind_group(0, &pipelines.normalize_bind_groups[cur], &[]);
-        pass.dispatch_workgroups(dispatch_linear, 1, 1);
-    }
 }
